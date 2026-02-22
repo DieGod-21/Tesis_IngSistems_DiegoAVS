@@ -58,24 +58,47 @@ function isValidEmail(email: string): boolean {
     return ALLOWED_EMAIL_DOMAINS.some((d) => lower.endsWith(d));
 }
 
-// ─── Estado local mock (simula DB del servidor) ─────────────────────
+// ─── Persistencia en localStorage ────────────────────────────────────
+//
+// Antes se usaba una variable de módulo (`let _recentUploads`), lo cual
+// provocaba que el historial de cargas se perdiera al recargar la página.
+// Ahora se usa localStorage con el mismo patrón de seed de `student.ts`.
 
-let _recentUploads: UploadItem[] = [
+const UPLOADS_KEY = 'umg_recent_uploads';
+
+const SEED_UPLOADS: UploadItem[] = [
     {
         id: 'ul-1',
         filename: 'estudiantes_pg1_v2.xlsx',
-        status: 'success' as const,
+        status: 'success',
         uploadedAt: 'Hace 2 horas',
-        type: 'excel' as const,
+        type: 'excel',
     },
     {
         id: 'ul-2',
         filename: 'listado_final_sedes.pdf',
-        status: 'success' as const,
+        status: 'success',
         uploadedAt: 'Ayer',
-        type: 'pdf' as const,
+        type: 'pdf',
     },
 ];
+
+/** Lee las cargas recientes desde localStorage. Carga datos semilla si no existe. */
+function readUploads(): UploadItem[] {
+    try {
+        const raw = localStorage.getItem(UPLOADS_KEY);
+        if (raw) return JSON.parse(raw) as UploadItem[];
+    } catch {
+        // JSON corrupto → reinicializar
+    }
+    localStorage.setItem(UPLOADS_KEY, JSON.stringify(SEED_UPLOADS));
+    return SEED_UPLOADS;
+}
+
+/** Guarda las cargas recientes en localStorage (máx. 10 ítems). */
+function saveUploads(uploads: UploadItem[]): void {
+    localStorage.setItem(UPLOADS_KEY, JSON.stringify(uploads.slice(0, 10)));
+}
 
 // ─── API pública ────────────────────────────────────────────────────
 
@@ -116,17 +139,18 @@ export async function importStudents(
 
     const imported = rows.length - rejected;
 
-    // Registrar en historial mock
-    _recentUploads = [
+    // Persistir nueva carga en historial
+    const current = readUploads();
+    saveUploads([
         {
             id: `ul-${Date.now()}`,
             filename: `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`,
             status: (rejected === rows.length ? 'error' : 'success') as UploadItem['status'],
             uploadedAt: 'Ahora',
-            type: 'excel' as const,
+            type: 'excel',
         },
-        ..._recentUploads,
-    ].slice(0, 10);
+        ...current,
+    ]);
 
     return { imported, rejected, errors };
 }
@@ -139,16 +163,17 @@ export async function uploadPdf(file: File): Promise<void> {
     await delay(500);
     // TODO: const fd = new FormData(); fd.append('file', file); await fetch('/api/students/upload-pdf', { method: 'POST', body: fd });
 
-    _recentUploads = [
+    const current = readUploads();
+    saveUploads([
         {
             id: `ul-${Date.now()}`,
             filename: file.name,
-            status: 'success' as const,
+            status: 'success',
             uploadedAt: 'Ahora',
-            type: 'pdf' as const,
+            type: 'pdf',
         },
-        ..._recentUploads,
-    ].slice(0, 10);
+        ...current,
+    ]);
 }
 
 /**
@@ -158,5 +183,5 @@ export async function uploadPdf(file: File): Promise<void> {
 export async function getRecentUploads(): Promise<UploadItem[]> {
     await delay(300);
     // TODO: return await fetch('/api/students/uploads').then(r => r.json());
-    return _recentUploads;
+    return readUploads();
 }

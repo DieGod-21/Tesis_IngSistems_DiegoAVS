@@ -2,12 +2,18 @@
  * authService.ts
  *
  * Capa de servicio para autenticación.
- * Centraliza toda la lógica de comunicación con la API.
- * En esta etapa simula una llamada real con un delay de 800ms.
+ * Persiste la sesión en localStorage para que sobreviva recargas.
  *
- * DECISIÓN: Separar el servicio del contexto permite cambiar
- * la implementación (mock → API real) sin tocar los componentes.
+ * Claves de localStorage:
+ *   auth_token → token de sesión (opaco / JWT en producción)
+ *   auth_user  → JSON del objeto User
+ *
+ * Para conectar al API real: reemplazar las funciones mock con fetch/axios,
+ * manteniendo la misma firma. El AuthContext NO cambia.
  */
+
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
 
 export interface User {
   id: string;
@@ -21,32 +27,51 @@ export interface LoginCredentials {
   password: string;
 }
 
-// Credenciales de prueba para el mock
-const MOCK_CREDENTIALS = {
-  email: 'admin@demo.com',
-  password: '123456',
-};
+// ─── Mock ────────────────────────────────────────────────────────────
 
-// Usuario de respuesta simulada
-const MOCK_USER: User = {
-  id: '1',
-  email: 'admin@demo.com',
-  name: 'Administrador Demo',
-  role: 'admin',
-};
+const MOCK_CREDENTIALS = { email: 'admin@demo.com', password: '123456' };
+const MOCK_USER: User = { id: '1', email: 'admin@demo.com', name: 'Administrador Demo', role: 'admin' };
+const MOCK_TOKEN = 'mock-jwt-token-abc123';
+
+// ─── Persistencia ───────────────────────────────────────────────────
+
+/** Lee la sesión guardada en localStorage. Retorna null si no existe o está corrupta. */
+export function readPersistedSession(): { user: User; token: string } | null {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const raw = localStorage.getItem(USER_KEY);
+    if (!token || !raw) return null;
+    const user = JSON.parse(raw) as User;
+    return { user, token };
+  } catch {
+    // JSON corrupto → limpiar
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
+}
+
+function persistSession(user: User, token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+function clearSession(): void {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+// ─── API pública ────────────────────────────────────────────────────
 
 /**
- * Simula una llamada a la API de autenticación.
- * @param email - Correo institucional
- * @param password - Contraseña
- * @returns Promise<User> con los datos del usuario autenticado
- * @throws Error si las credenciales no son válidas
+ * Autentica al usuario y persiste la sesión.
+ * TODO: reemplazar con → fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
  */
 export const login = async (email: string, password: string): Promise<User> => {
-  // Simulamos latencia de red (800ms)
   await new Promise((resolve) => setTimeout(resolve, 800));
 
   if (email === MOCK_CREDENTIALS.email && password === MOCK_CREDENTIALS.password) {
+    persistSession(MOCK_USER, MOCK_TOKEN);
     return MOCK_USER;
   }
 
@@ -54,10 +79,21 @@ export const login = async (email: string, password: string): Promise<User> => {
 };
 
 /**
- * Simula el cierre de sesión.
- * Con una API real, aquí se invalidaría el token en el servidor.
+ * Cierra sesión y limpia el localStorage.
+ * TODO: reemplazar con → fetch('/api/auth/logout', { method: 'POST' })
  */
 export const logout = async (): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, 200));
-  // Limpieza futura: remover token de localStorage, etc.
+  clearSession();
+};
+
+/**
+ * Verifica si un token sigue siendo válido en el servidor.
+ * TODO: reemplazar con → fetch('/api/auth/verify', { headers: { Authorization: `Bearer ${token}` } })
+ * Por ahora devuelve siempre true si existe el token (mock).
+ */
+export const verifyToken = async (token: string): Promise<boolean> => {
+  if (!token) return false;
+  // En producción: llamar al endpoint de verificación
+  return token === MOCK_TOKEN;
 };

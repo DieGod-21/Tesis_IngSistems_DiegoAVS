@@ -1,10 +1,18 @@
 /**
  * dashboardService.ts
  *
- * Fuente única de datos para el Dashboard PG1-PG2.
- * Las funciones son async con un delay simulado de 500ms.
- * Para conectar al API real: reemplazar el cuerpo de cada función
- * con fetch/axios manteniendo las mismas interfaces y firmas.
+ * Fuente única de datos para el Panel de Control PG1-PG2.
+ * Universidad Mariano Gálvez — Coordinación de Proyecto de Graduación.
+ *
+ * Las funciones son async con delay simulado (sin backend aún).
+ * Para conectar al API institucional real:
+ *   reemplazar el cuerpo de cada función con fetch/axios
+ *   manteniendo las mismas interfaces y firmas.
+ *
+ * TODO: Integrar API institucional GET /api/dashboard/summary
+ * TODO: Integrar API GET /api/acciones-pendientes?q=...
+ * TODO: Integrar servicio de notificaciones por correo institucional
+ * TODO: Integrar API de eventos del Calendario Académico
  */
 
 // ─── Interfaces ────────────────────────────────────────────────────
@@ -114,36 +122,37 @@ const MOCK_ACTIONS: PendingAction[] = [
     {
         id: 'pa-1',
         studentName: 'Ana Martínez',
-        studentId: '0901-19-1234',
+        studentId: '0901-21-1234',
         avatarInitials: 'AM',
         avatarVariant: 'blue',
         projectTitle: 'Gestión de Inventarios…',
         phase: 'PG1',
-        actionLabel: 'Revisión Requerida',
+        actionLabel: 'Revisión de Anteproyecto',
         actionVariant: 'danger',
-        deadline: 'Oct 24, 2023',
+        deadline: 'Semáforo rojo',
+        deadlineUrgent: true,
     },
     {
         id: 'pa-2',
         studentName: 'Juan González',
-        studentId: '0901-18-5678',
+        studentId: '0901-20-5678',
         avatarInitials: 'JG',
         avatarVariant: 'green',
         projectTitle: 'IA en Ciberseguridad…',
         phase: 'PG2',
-        actionLabel: 'Aprobación Pendiente',
+        actionLabel: 'Aprobación de Capítulos',
         actionVariant: 'warning',
-        deadline: 'Oct 26, 2023',
+        deadline: 'Pendiente de firma',
     },
     {
         id: 'pa-3',
         studentName: 'Sofía Ramírez',
-        studentId: '0901-19-9988',
+        studentId: '0901-22-9988',
         avatarInitials: 'SR',
         avatarVariant: 'slate',
         projectTitle: 'Optimización de Redes…',
         phase: 'PG1',
-        actionLabel: 'Urgente',
+        actionLabel: 'Urgente — Defensa Próxima',
         actionVariant: 'urgent',
         deadline: 'Hoy',
         deadlineUrgent: true,
@@ -153,31 +162,33 @@ const MOCK_ACTIONS: PendingAction[] = [
 const MOCK_DEADLINES: Deadline[] = [
     {
         id: 'dl-1',
-        month: 'Oct',
+        month: 'Mar',
         day: '28',
         title: 'Cierre de Anteproyectos',
-        subtitle: 'Cohorte PG1 - Segundo Semestre',
+        subtitle: 'Cohorte PG1 — Primer Semestre 2026',
     },
     {
         id: 'dl-2',
-        month: 'Nov',
-        day: '02',
-        title: 'Revisión de Capítulos I-II',
-        subtitle: 'Tesis PG2 - Estudiantes Activos',
+        month: 'Abr',
+        day: '15',
+        title: 'Revisión de Capítulos I-III',
+        subtitle: 'Tesis PG2 — Estudiantes con Asesor Asignado',
     },
     {
         id: 'dl-3',
-        month: 'Nov',
-        day: '15',
+        month: 'May',
+        day: '09',
         title: 'Defensas Privadas',
-        subtitle: 'Salón B-102 - Fase Final',
+        subtitle: 'Salón B-102 — Fase Final de Graduación',
     },
 ];
 
+// Recursos de Facultad — año dinámico
+const currentYear = new Date().getFullYear();
 const MOCK_RESOURCES: FacultyResource[] = [
-    { id: 'res-1', label: 'Guía Normativa 2023', iconName: 'Download', href: '#' },
+    { id: 'res-1', label: `Guía Normativa ${currentYear}`, iconName: 'Download', href: '#' },
     { id: 'res-2', label: 'Plantillas LaTeX / Word', iconName: 'File', href: '#' },
-    { id: 'res-3', label: 'Repositorio de Tesis', iconName: 'Link', href: '#' },
+    { id: 'res-3', label: 'Repositorio Institucional de Tesis', iconName: 'Link', href: '#' },
 ];
 
 // ─── API pública ────────────────────────────────────────────────────

@@ -1,25 +1,29 @@
 /**
  * Sidebar.tsx
  *
- * Barra lateral de navegación del Dashboard.
- * Detecta la ruta activa con `useLocation` (react-router-dom).
- * Iconos: lucide-react.
- * En móvil se muestra/oculta vía clase CSS según prop `open`.
+ * Barra lateral de navegación institucional UMG.
+ *
+ * ❌ NO usar <a href> — causa recarga completa y destruye el estado React.
+ * ✅ Usar NavLink de react-router-dom — navegación client-side, sin reload.
+ *
+ * NavLink detecta la ruta activa automáticamente con `isActive` (v5 API).
  */
 
 import React from 'react';
+import { NavLink, useHistory } from 'react-router-dom';
 import {
-    LayoutDashboard,
+    Home,
     UserPlus,
     Users,
     Briefcase,
-    Calendar,
+    CalendarDays,
     Settings,
     LogOut,
 } from 'lucide-react';
-import { useHistory, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import umgLogo from '../assets/umg_logo.png';
+
+// ─── Tipos ───────────────────────────────────────────────────────────
 
 interface SidebarProps {
     open?: boolean;
@@ -28,49 +32,37 @@ interface SidebarProps {
 
 interface NavItem {
     label: string;
-    href: string;
+    to: string;
     icon: React.ReactNode;
+    exact?: boolean;
 }
+
+// ─── Datos de navegación ─────────────────────────────────────────────
+// Terminología institucional: "Dashboard" → "Inicio"
+
+const NAV_ITEMS: NavItem[] = [
+    { label: 'Inicio', to: '/dashboard', icon: <Home size={20} />, exact: true },
+    { label: 'Nuevo Registro', to: '/students/new', icon: <UserPlus size={20} />, exact: true },
+    { label: 'Estudiantes', to: '/students', icon: <Users size={20} /> },
+    { label: 'Proyectos', to: '/projects', icon: <Briefcase size={20} /> },
+    {
+        label: 'Calendario Académico',
+        to: '/calendar',
+        icon: <CalendarDays size={20} />,
+        // TODO: Integrar API de eventos académicos del semestre
+    },
+];
+
+// ─── Componente ──────────────────────────────────────────────────────
 
 const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
     const { logout } = useAuth();
     const history = useHistory();
-    const { pathname } = useLocation();
 
     const handleLogout = async () => {
         await logout();
         history.push('/login');
     };
-
-    const navItems: NavItem[] = [
-        {
-            label: 'Dashboard',
-            href: '/dashboard',
-            icon: <LayoutDashboard size={20} />,
-        },
-        {
-            label: 'Nuevo Registro',
-            href: '/students/new',
-            icon: <UserPlus size={20} />,
-        },
-        {
-            label: 'Estudiantes',
-            href: '/students',
-            icon: <Users size={20} />,
-        },
-        {
-            label: 'Proyectos',
-            href: '/projects',
-            icon: <Briefcase size={20} />,
-        },
-        {
-            label: 'Calendario',
-            href: '/calendar',
-            icon: <Calendar size={20} />,
-        },
-    ];
-
-    const isActive = (href: string) => pathname.startsWith(href);
 
     return (
         <>
@@ -83,51 +75,60 @@ const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
                 />
             )}
 
-            <aside className={`dash-sidebar${open ? ' dash-sidebar--open' : ''}`}>
-                {/* Logo y nombre */}
+            <aside
+                className={`dash-sidebar${open ? ' dash-sidebar--open' : ''}`}
+                aria-label="Menú de navegación"
+            >
+                {/* Marca / Logo institucional */}
                 <div className="dash-sidebar__brand">
                     <div className="dash-sidebar__logo-box">
-                        <img src={umgLogo} alt="Logo UMG" className="dash-sidebar__logo" />
+                        <img src={umgLogo} alt="Logo Universidad Mariano Gálvez" className="dash-sidebar__logo" />
                     </div>
                     <div>
                         <p className="dash-sidebar__brand-name">UMG</p>
-                        <p className="dash-sidebar__brand-sub">Facultad de Ingeniería</p>
+                        <p className="dash-sidebar__brand-sub">Coordinación de Proyectos</p>
                     </div>
                 </div>
 
                 {/* Navegación principal */}
                 <nav className="dash-sidebar__nav" aria-label="Navegación principal">
-                    {navItems.map((item) => (
-                        <a
+                    {NAV_ITEMS.map((item) => (
+                        <NavLink
                             key={item.label}
-                            href={item.href}
-                            className={`dash-sidebar__nav-item${isActive(item.href) ? ' dash-sidebar__nav-item--active' : ''
-                                }`}
+                            to={item.to}
+                            exact={item.exact}
+                            className="dash-sidebar__nav-item"
+                            activeClassName="dash-sidebar__nav-item--active"
+                            onClick={onClose}   /* cierra sidebar móvil al navegar */
                         >
                             {item.icon}
                             <span>{item.label}</span>
-                        </a>
+                        </NavLink>
                     ))}
                 </nav>
 
                 {/* Acciones inferiores */}
                 <div className="dash-sidebar__footer">
-                    <a
-                        href="/settings"
-                        className={`dash-sidebar__nav-item${isActive('/settings') ? ' dash-sidebar__nav-item--active' : ''
-                            }`}
+                    <NavLink
+                        to="/settings"
+                        exact
+                        className="dash-sidebar__nav-item"
+                        activeClassName="dash-sidebar__nav-item--active"
                     >
                         <Settings size={20} />
                         <span>Configuración</span>
-                    </a>
+                    </NavLink>
+
                     <button
                         className="dash-sidebar__nav-item dash-sidebar__logout"
                         onClick={handleLogout}
+                        type="button"
                     >
                         <LogOut size={20} />
                         <span>Cerrar Sesión</span>
                     </button>
                 </div>
+
             </aside>
         </>
     );

@@ -31,6 +31,9 @@ import '@ionic/react/css/display.css';
 /* Theme variables */
 import './theme/variables.css';
 
+/* Layout reset: corrige scroll en Ionic + 100dvh móvil + overflow */
+import './styles/layout-reset.css';
+
 setupIonicReact();
 
 /**
