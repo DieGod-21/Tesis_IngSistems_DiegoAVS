@@ -1,2 +1,29 @@
+/* ─── Variables de Marca UMG y Dashboard ─────────────────────────── */
 /* For information on how to create your own theme, please refer to:
-http://ionicframework.com/docs/theming/ */
+   http://ionicframework.com/docs/theming/ */
+
+:root {
+    /* ── Colores de marca UMG ─── */
+    --umg-navy: #003366;
+    --umg-blue: #004080;
+    --umg-dark: #00264d;
+    --umg-red: #cc0000;
+    --umg-light: #f3f6f9;
+
+    /* ── Colores del Dashboard ─── */
+    --dash-bg: #f1f5f9;
+    --dash-sidebar-bg: #003366;
+    --dash-sidebar-width: 256px;
+    --dash-card-bg: #ffffff;
+    --dash-border: #e2e8f0;
+    --dash-text-primary: #1e293b;
+    --dash-text-secondary: #64748b;
+    --dash-text-muted: #94a3b8;
+
+    /* ── Sombras ─── */
+    --dash-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --dash-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+    /* ── Transiciones ─── */
+    --dash-transition: 150ms ease;
+}

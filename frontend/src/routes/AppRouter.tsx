@@ -4,6 +4,7 @@ import { IonRouterOutlet } from '@ionic/react';
 import { useAuth } from '../context/AuthContext';
 import LoginPage from '../pages/LoginPage';
 import DashboardPage from '../pages/DashboardPage';
+import StudentNewPage from '../pages/StudentNewPage';
 
 /**
  * AppRouter.tsx
@@ -16,9 +17,10 @@ import DashboardPage from '../pages/DashboardPage';
  *  3. Mantener la lógica de redirección separada de los componentes
  *
  * Rutas registradas:
- *  /login      → LoginPage (pública)
- *  /dashboard  → DashboardPage (protegida)
- *  /           → Redirige según estado de autenticación
+ *  /login         → LoginPage (pública)
+ *  /dashboard     → DashboardPage (protegida)
+ *  /students/new  → StudentNewPage (protegida)
+ *  /              → Redirige según estado de autenticación
  *
  * ProtectedRoute: Si el usuario no está autenticado, redirige a /login.
  * PublicRoute: Si el usuario YA está autenticado, redirige a /dashboard
@@ -89,6 +91,11 @@ const AppRouter: React.FC = () => {
                 {/* Ruta protegida: Dashboard */}
                 <ProtectedRoute path="/dashboard" exact>
                     <DashboardPage />
+                </ProtectedRoute>
+
+                {/* Ruta protegida: Nuevo Registro */}
+                <ProtectedRoute path="/students/new" exact>
+                    <StudentNewPage />
                 </ProtectedRoute>
 
                 {/* Ruta raíz: redirigir según autenticación */}
