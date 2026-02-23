@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { importStudents, uploadPdf } from '../../services/studentsService';
 import type { ImportResult, ParsedRow } from '../../services/studentsService';
+import { isInstitutionalEmail } from '../../utils/validators';
 
 const ACCEPTED_TYPES = '.xlsx,.xls,.csv,.pdf';
 const MAX_PREVIEW_ROWS = 20;
@@ -235,9 +236,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                         const hasError =
                                             !row.carnetId?.trim() ||
                                             (!!row.correoInstitucional &&
-                                                !['@miumg.edu.gt', '@umg.edu.gt'].some((d) =>
-                                                    row.correoInstitucional?.toLowerCase().endsWith(d),
-                                                ));
+                                                !isInstitutionalEmail(row.correoInstitucional));
                                         return (
                                             <tr
                                                 key={row.rowIndex}

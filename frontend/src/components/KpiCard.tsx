@@ -8,8 +8,7 @@
  */
 
 import React from 'react';
-import * as Icons from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { resolveIcon } from '../utils/iconRegistry';
 import type { KpiData } from '../services/dashboardService';
 
 interface KpiCardProps {
@@ -17,7 +16,8 @@ interface KpiCardProps {
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({ data }) => {
-    const IconComponent = (Icons as unknown as Record<string, LucideIcon>)[data.iconName];
+    const IconComponent = resolveIcon(data.iconName);
+
 
     return (
         <article className={`kpi-card kpi-card--${data.iconVariant}`}>

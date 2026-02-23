@@ -7,8 +7,7 @@
  */
 
 import React from 'react';
-import * as Icons from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { resolveIcon } from '../utils/iconRegistry';
 import type { FacultyResource } from '../services/dashboardService';
 
 interface FacultyResourcesProps {
@@ -22,7 +21,8 @@ const FacultyResources: React.FC<FacultyResourcesProps> = ({ resources }) => {
 
             <ul className="dash-resources__list">
                 {resources.map((item) => {
-                    const IconComponent = (Icons as unknown as Record<string, LucideIcon>)[item.iconName];
+                    const IconComponent = resolveIcon(item.iconName);
+
 
                     return (
                         <li key={item.id} className="dash-resources__item">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IonButton, IonInput, IonIcon, IonSpinner, IonToast } from '@ionic/react';
 import { eyeOutline, eyeOffOutline } from 'ionicons/icons';
 import { useAuth } from '../context/AuthContext';
+import { runValidators, validators, isInstitutionalEmail } from '../utils/validators';
 import umgLogo from '../assets/umg_logo.png';
 
 /**
@@ -19,17 +20,12 @@ import umgLogo from '../assets/umg_logo.png';
  * son de tipo submit/text/password, por lo que funciona sin JS extra.
  */
 
-// Regex estándar RFC 5322 simplificado
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INSTITUTIONAL_DOMAIN = '@miumg.edu.gt';
-
 const LoginForm: React.FC = () => {
     const { login, loading, error } = useAuth();
 
     // Estado del formulario
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [remember, setRemember] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
     // Estado de validación
@@ -46,12 +42,9 @@ const LoginForm: React.FC = () => {
         }
     }, [error]);
 
-    // ─── Validación de email ──────────────────────────────────────────
-    const validateEmail = (value: string): string | null => {
-        if (!value.trim()) return 'El correo es requerido';
-        if (!EMAIL_REGEX.test(value)) return 'Ingrese un correo válido (ej. usuario@dominio.gt)';
-        return null;
-    };
+    // ─── Validación de email (centralizada) ───────────────────────────
+    const validateEmail = (value: string): string | null =>
+        runValidators(value, validators.required('El correo'), validators.email.format);
 
     const handleEmailChange = (value: string) => {
         setEmail(value);
@@ -90,7 +83,7 @@ const LoginForm: React.FC = () => {
     const showDomainHint =
         email.includes('@') &&
         emailError === null &&
-        !email.endsWith(INSTITUTIONAL_DOMAIN);
+        !isInstitutionalEmail(email);
 
     return (
         <>
@@ -187,18 +180,7 @@ const LoginForm: React.FC = () => {
                     <div className="auth-field-error" aria-live="polite" />
                 </div>
 
-                {/* Checkbox: Recordar sesión */}
-                <div className="auth-form__remember">
-                    <input
-                        type="checkbox"
-                        id="remember_me"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                    />
-                    <label htmlFor="remember_me" className="auth-form__remember-label">
-                        Recordar sesión
-                    </label>
-                </div>
+
 
                 {/* Botón de submit con spinner */}
                 <IonButton

@@ -2,6 +2,7 @@
  * StudentManualForm.tsx
  *
  * Formulario de registro manual de estudiantes.
+ * Usa el hook genérico useForm para manejo de estado + validación.
  * Validación onBlur + onSubmit (no onChange).
  * Reserva espacio fijo para mensajes de error (sin layout shift).
  * IonToast para feedback de éxito/error.
@@ -12,17 +13,14 @@ import { IonToast } from '@ionic/react';
 import { User, CreditCard, Mail, BookOpen, GraduationCap, Save, Trash2 } from 'lucide-react';
 import {
     createStudent,
-    ALLOWED_EMAIL_DOMAINS,
 } from '../../services/studentsService';
 import type { StudentPayload } from '../../services/studentsService';
+import { useForm } from '../../hooks/useForm';
+import { runValidators, validators } from '../../utils/validators';
 
-// ─── Tipos de estado ────────────────────────────────────────────────
+// ─── Constantes ──────────────────────────────────────────────────────
 
-type FormValues = Record<keyof StudentPayload, string>;
-type FormErrors = Partial<Record<keyof StudentPayload, string>>;
-type FormTouched = Partial<Record<keyof StudentPayload, boolean>>;
-
-const EMPTY_FORM: FormValues = {
+const EMPTY_FORM: Record<keyof StudentPayload, string> = {
     nombreCompleto: '',
     carnetId: '',
     correoInstitucional: '',
@@ -42,35 +40,30 @@ const FASES = [
     { value: 'PG2', label: 'Proyecto de Graduación 2 (PG2)' },
 ];
 
-// ─── Validación ─────────────────────────────────────────────────────
+// ─── Validación centralizada ─────────────────────────────────────────
 
-function validate(values: FormValues): FormErrors {
-    const errors: FormErrors = {};
+function validate(values: Record<keyof StudentPayload, string>) {
+    const errors: Partial<Record<keyof StudentPayload, string>> = {};
 
-    if (!values.nombreCompleto.trim()) {
-        errors.nombreCompleto = 'El nombre completo es requerido.';
-    }
+    const nombre = runValidators(values.nombreCompleto, validators.required('El nombre completo'));
+    if (nombre) errors.nombreCompleto = nombre;
 
-    if (!values.carnetId.trim()) {
-        errors.carnetId = 'El carnet ID es requerido.';
-    }
+    const carnet = runValidators(values.carnetId, validators.required('El carnet ID'));
+    if (carnet) errors.carnetId = carnet;
 
-    if (!values.correoInstitucional.trim()) {
-        errors.correoInstitucional = 'El correo institucional es requerido.';
-    } else {
-        const lower = values.correoInstitucional.toLowerCase();
-        if (!ALLOWED_EMAIL_DOMAINS.some((d) => lower.endsWith(d))) {
-            errors.correoInstitucional = `Debe usar dominio ${ALLOWED_EMAIL_DOMAINS.join(' o ')}.`;
-        }
-    }
+    const correo = runValidators(
+        values.correoInstitucional,
+        validators.required('El correo institucional'),
+        validators.email.format,
+        validators.email.institutional,
+    );
+    if (correo) errors.correoInstitucional = correo;
 
-    if (!values.semestreLectivo) {
-        errors.semestreLectivo = 'Selecciona un semestre.';
-    }
+    const semestre = validators.select('un semestre')(values.semestreLectivo);
+    if (semestre) errors.semestreLectivo = semestre;
 
-    if (!values.faseAcademica) {
-        errors.faseAcademica = 'Selecciona una fase académica.';
-    }
+    const fase = validators.select('una fase académica')(values.faseAcademica);
+    if (fase) errors.faseAcademica = fase;
 
     return errors;
 }
@@ -78,64 +71,26 @@ function validate(values: FormValues): FormErrors {
 // ─── Componente ─────────────────────────────────────────────────────
 
 const StudentManualForm: React.FC = () => {
-    const [values, setValues] = useState<FormValues>(EMPTY_FORM);
-    const [errors, setErrors] = useState<FormErrors>({});
-    const [touched, setTouched] = useState<FormTouched>({});
-    const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<{ open: boolean; message: string; color: string }>({
         open: false,
         message: '',
         color: 'success',
     });
 
-    const handleChange = (field: keyof FormValues, value: string) => {
-        setValues((prev) => ({ ...prev, [field]: value }));
-        // Si el campo ya fue tocado y tiene error, recalcular solo ese campo
-        if (touched[field]) {
-            const partial = validate({ ...values, [field]: value });
-            setErrors((prev) => ({ ...prev, [field]: partial[field] }));
-        }
-    };
-
-    const handleBlur = (field: keyof FormValues) => {
-        setTouched((prev) => ({ ...prev, [field]: true }));
-        const partial = validate(values);
-        setErrors((prev) => ({ ...prev, [field]: partial[field] }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const allTouched = (Object.keys(EMPTY_FORM) as (keyof FormValues)[]).reduce(
-            (acc, k) => ({ ...acc, [k]: true }),
-            {} as FormTouched,
-        );
-        setTouched(allTouched);
-        const newErrors = validate(values);
-        setErrors(newErrors);
-        if (Object.keys(newErrors).length > 0) return;
-
-        setLoading(true);
-        try {
-            await createStudent(values);
-            setToast({ open: true, message: 'Estudiante registrado exitosamente.', color: 'success' });
-            setValues(EMPTY_FORM);
-            setTouched({});
-            setErrors({});
-        } catch {
-            setToast({ open: true, message: 'Error al registrar. Intenta de nuevo.', color: 'danger' });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleReset = () => {
-        setValues(EMPTY_FORM);
-        setErrors({});
-        setTouched({});
-    };
-
-    const showError = (field: keyof FormValues) =>
-        touched[field] && errors[field] ? errors[field] : undefined;
+    const { values, submitting, handleChange, handleBlur, handleSubmit, reset, showError } =
+        useForm({
+            initialValues: EMPTY_FORM,
+            validate,
+            onSubmit: async (vals) => {
+                try {
+                    await createStudent(vals);
+                    setToast({ open: true, message: 'Estudiante registrado exitosamente.', color: 'success' });
+                } catch {
+                    setToast({ open: true, message: 'Error al registrar. Intenta de nuevo.', color: 'danger' });
+                    throw new Error('submit failed'); // re-throw para que useForm no haga reset
+                }
+            },
+        });
 
     return (
         <>
@@ -279,17 +234,17 @@ const StudentManualForm: React.FC = () => {
                         <button
                             type="submit"
                             className="sn-btn-primary"
-                            disabled={loading}
-                            aria-busy={loading}
+                            disabled={submitting}
+                            aria-busy={submitting}
                         >
                             <Save size={16} />
-                            {loading ? 'Registrando…' : 'Registrar Estudiante'}
+                            {submitting ? 'Registrando…' : 'Registrar Estudiante'}
                         </button>
                         <button
                             type="button"
                             className="sn-btn-secondary"
-                            onClick={handleReset}
-                            disabled={loading}
+                            onClick={reset}
+                            disabled={submitting}
                         >
                             <Trash2 size={16} />
                             Limpiar Formulario
