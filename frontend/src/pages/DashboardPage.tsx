@@ -6,14 +6,15 @@
  * Facultad de Ingeniería en Sistemas de Información
  * Universidad Mariano Gálvez de Guatemala
  *
- * Datos en tiempo real desde localStorage (sin backend).
- * Conectar al API institucional: ver TODO comments en dashboardService.ts.
+ * Lógica de datos delegada a:
+ *   - useDashboardData  → summary + pending actions + search
+ *   - useStudentsDashboard → estudiantes + KPIs + filtro rápido
  *
  * TODO: Integrar API de eventos académicos del calendario semestral
  * TODO: Integrar servicio de notificaciones por correo institucional
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { useHistory } from 'react-router-dom';
 import {
     Plus, Users, CheckCircle2, Clock, Upload,
@@ -28,29 +29,15 @@ import UpcomingDeadlines from '../components/UpcomingDeadlines';
 import FacultyResources from '../components/FacultyResources';
 import StatusBadge from '../components/students/StatusBadge';
 
-import { getDashboardSummary, getPendingActions } from '../services/dashboardService';
-import type { DashboardSummary, PendingAction } from '../services/dashboardService';
-import { getRecentStudents, computeStudentKpis, getStudents } from '../types/student';
-import type { Student } from '../types/student';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { useStudentsDashboard } from '../hooks/useStudentsDashboard';
+import { initials } from '../utils/strings';
 
 import '../styles/dashboard.css';
 import '../styles/students-list.css';   // sl-badge, sl-avatar reutilizados
 
 // ─── Año actual dinámico ─────────────────────────────────────────────
 const currentYear = new Date().getFullYear();
-
-// ─── Estados ─────────────────────────────────────────────────────────
-
-type SummaryState =
-    | { status: 'idle' }
-    | { status: 'loading' }
-    | { status: 'error'; message: string }
-    | { status: 'success'; data: DashboardSummary };
-
-type TableState =
-    | { status: 'loading' }
-    | { status: 'error'; message: string }
-    | { status: 'success'; data: PendingAction[] };
 
 // ─── Skeletons ───────────────────────────────────────────────────────
 
@@ -87,84 +74,24 @@ const TableSkeleton: React.FC = () => (
     </div>
 );
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function initials(name: string): string {
-    return name.split(' ').map((w) => w[0] ?? '').slice(0, 2).join('').toUpperCase();
-}
-
 // ─── Componente Principal ─────────────────────────────────────────────
 
 const DashboardPage: React.FC = () => {
     const history = useHistory();
 
-    // Datos dashboard service (mock / futuro API)
-    const [summary, setSummary] = useState<SummaryState>({ status: 'idle' });
-    const [tableState, setTableState] = useState<TableState>({ status: 'loading' });
-    const [searchQuery, setSearchQuery] = useState('');
+    // Datos del servicio dashboard (KPIs, acciones pendientes, deadlines)
+    const { summary, tableState, searchQuery, loadSummary, loadActions, handleSearch } =
+        useDashboardData();
 
-    // Datos de estudiantes desde localStorage
-    const [students, setStudents] = useState<Student[]>([]);
-    const [recentStudents, setRecentStudents] = useState<Student[]>([]);
-
-    // Filtro rápido del panel de inicio
-    const [dashStudentQuery, setDashStudentQuery] = useState('');
-    const [dashStatusFilter, setDashStatusFilter] = useState<'all' | 'approved' | 'pending'>('all');
-
-    // ── Carga inicial ───────────────────────────────────────────────
-
-    const loadSummary = useCallback(async () => {
-        setSummary({ status: 'loading' });
-        try {
-            const data = await getDashboardSummary();
-            setSummary({ status: 'success', data });
-        } catch (err) {
-            setSummary({ status: 'error', message: err instanceof Error ? err.message : 'Error al cargar datos' });
-        }
-    }, []);
-
-    const loadActions = useCallback(async (query: string) => {
-        setTableState({ status: 'loading' });
-        try {
-            const data = await getPendingActions(query);
-            setTableState({ status: 'success', data });
-        } catch (err) {
-            setTableState({ status: 'error', message: err instanceof Error ? err.message : 'Error al cargar expedientes' });
-        }
-    }, []);
-
-    useEffect(() => { loadSummary(); }, [loadSummary]);
-    useEffect(() => { loadActions(searchQuery); }, [searchQuery, loadActions]);
-
-    useEffect(() => {
-        const all = getStudents();
-        setStudents(all);
-        setRecentStudents(getRecentStudents(5));
-    }, []);
-
-    const handleSearch = useCallback((q: string) => setSearchQuery(q), []);
-
-    // ── KPIs de estudiantes ─────────────────────────────────────────
-
-    const studentKpis = useMemo(() => computeStudentKpis(students), [students]);
-
-    // ── Filtro rápido de actividad reciente ─────────────────────────
-
-    const filteredRecent = useMemo(() => {
-        const q = dashStudentQuery.trim().toLowerCase();
-        return recentStudents.filter((s) => {
-            const matchText = !q ||
-                s.nombreCompleto.toLowerCase().includes(q) ||
-                s.carnetId.toLowerCase().includes(q);
-            const matchStatus =
-                dashStatusFilter === 'all' ||
-                (dashStatusFilter === 'approved' && s.approved) ||
-                (dashStatusFilter === 'pending' && !s.approved);
-            return matchText && matchStatus;
-        });
-    }, [recentStudents, dashStudentQuery, dashStatusFilter]);
-
-    // ── Render ──────────────────────────────────────────────────────
+    // Datos de estudiantes desde localStorage (KPIs + filtro rápido)
+    const {
+        studentKpis,
+        filteredRecent,
+        dashStudentQuery,
+        setDashStudentQuery,
+        dashStatusFilter,
+        setDashStatusFilter,
+    } = useStudentsDashboard();
 
     return (
         <AppShell onSearch={handleSearch}>
@@ -288,17 +215,17 @@ const DashboardPage: React.FC = () => {
                                 <RefreshCw size={14} aria-hidden="true" /> Reintentar
                             </button>
                         </div>
-                    ) : tableState.data.length === 0 ? (
+                    ) : tableState.status === 'success' && tableState.data.length === 0 ? (
                         <div className="dash-empty-block" role="status">
                             <p className="dash-empty-block__msg">
                                 {searchQuery
-                                    ? <>Sin expedientes para <strong>"{searchQuery}"</strong></>
+                                    ? <><span>Sin expedientes para </span><strong>"{searchQuery}"</strong></>
                                     : 'No hay expedientes con acciones pendientes en este momento.'}
                             </p>
                         </div>
-                    ) : (
+                    ) : tableState.status === 'success' ? (
                         <PendingActionsTable actions={tableState.data} />
-                    )}
+                    ) : null}
 
                     {/* Panel derecho */}
                     <aside className="dash-sidebar-right" aria-label="Panel de actividad académica">

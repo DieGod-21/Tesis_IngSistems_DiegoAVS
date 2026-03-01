@@ -1,32 +1,25 @@
 /**
  * StudentsListPage.tsx
  *
- * Página /students — Listado de Estudiantes con:
- * - KPI strip (Total / Aprobados / Pendientes / PG1 vs PG2)
- * - Filtros: búsqueda por nombre o carnet + tabs de estado
- * - Tabla con Badge de estado + ApprovalToggle por fila (Optimistic UI)
- * - Persistencia en localStorage vía helpers de student.ts
+ * Página /students — Listado de Estudiantes.
+ * Toda la lógica de datos (carga, filtros, KPIs, toggle optimista)
+ * vive en el hook useStudentsList. Este componente es 100% UI.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { useHistory } from 'react-router-dom';
 import { Search, Plus, ChevronRight } from 'lucide-react';
 import AppShell from '../layout/AppShell';
 import ApprovalToggle from '../components/students/ApprovalToggle';
 import StatusBadge from '../components/students/StatusBadge';
-import {
-    computeStudentKpis,
-    getStudents,
-    updateStudentStatus,
-} from '../types/student';
-import type { Student } from '../types/student';
+import { useStudentsList } from '../hooks/useStudentsList';
+import type { StatusFilter } from '../hooks/useStudentsList';
+import { initials } from '../utils/strings';
 
 import '../styles/students-list.css';
 import '../styles/student-new.css';   // reutiliza clases sn-breadcrumb
 
-// ─── Tipos de filtro ─────────────────────────────────────────────────
-
-type StatusFilter = 'all' | 'approved' | 'pending';
+// ─── Constantes de UI ─────────────────────────────────────────────────
 
 const TABS: { label: string; value: StatusFilter }[] = [
     { label: 'Todos', value: 'all' },
@@ -34,18 +27,7 @@ const TABS: { label: string; value: StatusFilter }[] = [
     { label: 'Pendientes', value: 'pending' },
 ];
 
-// ─── Avatar helpers ──────────────────────────────────────────────────
-
-function initials(name: string): string {
-    return name
-        .split(' ')
-        .map((w) => w[0] ?? '')
-        .slice(0, 2)
-        .join('')
-        .toUpperCase();
-}
-
-// ─── Skeleton row ────────────────────────────────────────────────────
+// ─── Skeleton row ─────────────────────────────────────────────────────
 
 const TableSkeleton: React.FC = () => (
     <>
@@ -70,70 +52,21 @@ const TableSkeleton: React.FC = () => (
     </>
 );
 
-// ─── Componente ──────────────────────────────────────────────────────
+// ─── Componente ───────────────────────────────────────────────────────
 
 const StudentsListPage: React.FC = () => {
     const history = useHistory();
-    const [students, setStudents] = useState<Student[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [query, setQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    // Track de toggles en curso para deshabilitar durante el delay simulado
-    const [toggling, setToggling] = useState<Record<string, boolean>>({});
-
-    // Cargar desde localStorage
-    useEffect(() => {
-        const data = getStudents();
-        setStudents(data);
-        setLoading(false);
-    }, []);
-
-    // Actualización optimista del estado de aprobación
-    const handleToggle = useCallback((id: string, next: boolean) => {
-        // 1. Optimistic: actualizar UI al instante
-        setStudents((prev) =>
-            prev.map((s) =>
-                s.id === id ? { ...s, approved: next, updatedAt: new Date().toISOString() } : s,
-            ),
-        );
-        // 2. Marcar como en progreso
-        setToggling((t) => ({ ...t, [id]: true }));
-
-        // 3. Persistir (mock: delay 300ms — reemplazar con fetch PATCH)
-        setTimeout(() => {
-            // TODO API real:
-            // fetch(`/api/students/${id}/status`, {
-            //   method: 'PATCH',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({ approved: next }),
-            // }).catch(() => {
-            //   // Rollback en caso de error
-            //   setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
-            // });
-            updateStudentStatus(id, next);
-            setToggling((t) => ({ ...t, [id]: false }));
-        }, 300);
-    }, []);
-
-    // KPIs
-    const kpis = useMemo(() => computeStudentKpis(students), [students]);
-
-    // Filtrado
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        return students.filter((s) => {
-            const matchText =
-                !q ||
-                s.nombreCompleto.toLowerCase().includes(q) ||
-                s.carnetId.toLowerCase().includes(q) ||
-                s.correoInstitucional.toLowerCase().includes(q);
-            const matchStatus =
-                statusFilter === 'all' ||
-                (statusFilter === 'approved' && s.approved) ||
-                (statusFilter === 'pending' && !s.approved);
-            return matchText && matchStatus;
-        });
-    }, [students, query, statusFilter]);
+    const {
+        loading,
+        query,
+        setQuery,
+        statusFilter,
+        setStatusFilter,
+        toggling,
+        handleToggle,
+        kpis,
+        filtered,
+    } = useStudentsList();
 
     return (
         <AppShell>
@@ -290,15 +223,9 @@ const StudentsListPage: React.FC = () => {
                                             <div className="sl-toggle-cell">
                                                 <ApprovalToggle
                                                     checked={student.approved}
-                                                    onChange={(next) =>
-                                                        handleToggle(student.id, next)
-                                                    }
+                                                    onChange={(next) => handleToggle(student.id, next)}
                                                     disabled={toggling[student.id]}
-                                                    label={
-                                                        student.approved
-                                                            ? 'Aprobado'
-                                                            : 'Pendiente'
-                                                    }
+                                                    label={student.approved ? 'Aprobado' : 'Pendiente'}
                                                 />
                                             </div>
                                         </td>
