@@ -91,8 +91,11 @@ const SEED_STUDENTS: Student[] = [
 /**
  * Obtiene todos los estudiantes desde localStorage.
  * Si no existe la clave, carga los datos semilla y los guarda.
+ *
+ * Firma async para compatibilidad futura con API real.
+ * Para API real: return await apiFetch<Student[]>('/students');
  */
-export function getStudents(): Student[] {
+export async function getStudents(): Promise<Student[]> {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw) as Student[];
@@ -119,8 +122,9 @@ export function saveStudents(students: Student[]): void {
  * //   body: JSON.stringify({ approved }),
  * // });
  */
-export function updateStudentStatus(id: string, approved: boolean): Student[] {
-    const students = getStudents().map((s) =>
+export async function updateStudentStatus(id: string, approved: boolean): Promise<Student[]> {
+    const all = await getStudents();
+    const students = all.map((s) =>
         s.id === id ? { ...s, approved, updatedAt: new Date().toISOString() } : s,
     );
     saveStudents(students);
@@ -131,7 +135,7 @@ export function updateStudentStatus(id: string, approved: boolean): Student[] {
  * Añade un nuevo estudiante al almacenamiento.
  * Retorna la lista actualizada.
  */
-export function addStudent(data: Omit<Student, 'id' | 'createdAt' | 'updatedAt' | 'approved'>): Student[] {
+export async function addStudent(data: Omit<Student, 'id' | 'createdAt' | 'updatedAt' | 'approved'>): Promise<Student[]> {
     const now = new Date().toISOString();
     const newStudent: Student = {
         ...data,
@@ -140,7 +144,8 @@ export function addStudent(data: Omit<Student, 'id' | 'createdAt' | 'updatedAt' 
         createdAt: now,
         updatedAt: now,
     };
-    const students = [...getStudents(), newStudent];
+    const all = await getStudents();
+    const students = [...all, newStudent];
     saveStudents(students);
     return students;
 }
@@ -156,8 +161,9 @@ export function computeStudentKpis(students: Student[]) {
 }
 
 /** Retorna los últimos N estudiantes por fecha de actualización. */
-export function getRecentStudents(n = 5): Student[] {
-    return [...getStudents()]
+export async function getRecentStudents(n = 5): Promise<Student[]> {
+    const all = await getStudents();
+    return [...all]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, n);
 }

@@ -91,8 +91,11 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
 const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
     const [state, setState] = useState<UploadState>({ status: 'idle' });
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Almacena el archivo real para usarlo en el upload (evita perder la referencia)
+    const selectedFileRef = useRef<File | null>(null);
 
     const handleFile = useCallback(async (file: File) => {
+        selectedFileRef.current = file;
         setState({ status: 'parsing' });
         try {
             if (isPdf(file)) {
@@ -105,9 +108,11 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                 const rows = await parseExcel(file);
                 setState({ status: 'preview', rows, filename: file.name });
             } else {
+                selectedFileRef.current = null;
                 setState({ status: 'error', message: 'Formato no soportado. Usa .xlsx, .xls, .csv o .pdf.' });
             }
         } catch {
+            selectedFileRef.current = null;
             setState({ status: 'error', message: 'No se pudo leer el archivo.' });
         }
     }, []);
@@ -150,12 +155,10 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
             }
         } else if (state.status === 'pdf') {
             const filename = state.filename;
+            const realFile = selectedFileRef.current;
             setState({ status: 'uploading' });
-            // Reconstruct File no es posible aquí; pasamos un File dummy con el nombre
-            // En producción el File real se guardaría en estado antes de este punto.
-            // Workaround: guardamos el File en ref en handleFile
             try {
-                await uploadPdf(new File([''], filename, { type: 'application/pdf' }));
+                await uploadPdf(realFile ?? new File([''], filename, { type: 'application/pdf' }));
                 setState({ status: 'pdf-success', filename });
                 onUploaded?.();
             } catch {
@@ -164,7 +167,10 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
         }
     };
 
-    const handleReset = () => setState({ status: 'idle' });
+    const handleReset = () => {
+        selectedFileRef.current = null;
+        setState({ status: 'idle' });
+    };
 
     // ── Render por estado ───────────────────────────────────────────
 

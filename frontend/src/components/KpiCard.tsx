@@ -43,8 +43,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ data }) => {
             {data.progressValue !== undefined ? (
                 /*
                  * La barra de progreso usa la variable CSS --kpi-progress
-                 * definida en el elemento a través de un atributo data-progress
-                 * + regla CSS que lo lee. Esto evita completamente el inline style.
+                 * para definir el ancho dinámicamente sin necesidad de una
+                 * clase CSS por cada posible valor (0-100).
                  */
                 <div
                     className="kpi-card__progress-track"
@@ -55,7 +55,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ data }) => {
                     aria-label={`${data.label}: ${data.progressValue}%`}
                 >
                     <div
-                        className={`kpi-card__progress-bar kpi-card__progress-bar--${data.progressValue}`}
+                        className="kpi-card__progress-bar"
+                        style={{ '--kpi-progress': `${data.progressValue}%` } as React.CSSProperties}
                     />
                 </div>
             ) : (

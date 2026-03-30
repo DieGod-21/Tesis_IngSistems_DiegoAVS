@@ -28,23 +28,28 @@ export function useStudentsList() {
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    // Tracks in-progress toggles to disable the control during the async delay
+    // Tracks in-progress toggles to disable the control during the async operation
     const [toggling, setToggling] = useState<Record<string, boolean>>({});
-    // Ref to collect pending timeoutIds for cleanup on unmount
-    const pendingTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+    // Evita setState en componente desmontado (Promise puede resolver tarde)
+    const isMountedRef = useRef(true);
 
-    // ── Carga inicial ────────────────────────────────────────────────
+    // ── Carga inicial (async) ─────────────────────────────────────────
 
     useEffect(() => {
-        const data = getStudents();
-        setStudents(data);
-        setLoading(false);
+        let canceled = false;
 
-        // Cleanup: cancel any pending timers when unmounting
-        const timers = pendingTimers.current;
+        const load = async () => {
+            const data = await getStudents();
+            if (!canceled) {
+                setStudents(data);
+                setLoading(false);
+            }
+        };
+
+        load();
         return () => {
-            timers.forEach((id) => clearTimeout(id));
-            timers.clear();
+            canceled = true;
+            isMountedRef.current = false;
         };
     }, []);
 
@@ -59,23 +64,19 @@ export function useStudentsList() {
         );
         setToggling((t) => ({ ...t, [id]: true }));
 
-        // 2. Persistir tras delay simulado (reemplazar con fetch PATCH en API real)
-        // TODO API real:
-        // fetch(`/api/students/${id}/status`, {
-        //   method: 'PATCH',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify({ approved: next }),
-        // }).catch(() => {
-        //   // Rollback en caso de error
-        //   setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
-        // });
-        const tid = setTimeout(() => {
-            updateStudentStatus(id, next);
-            setToggling((t) => ({ ...t, [id]: false }));
-            pendingTimers.current.delete(tid);
-        }, 300);
-
-        pendingTimers.current.add(tid);
+        // 2. Persistir en store (async). Para API real: reemplazar con fetch PATCH.
+        updateStudentStatus(id, next)
+            .catch(() => {
+                // Rollback solo si el componente sigue montado
+                if (isMountedRef.current) {
+                    setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
+                }
+            })
+            .finally(() => {
+                if (isMountedRef.current) {
+                    setToggling((t) => ({ ...t, [id]: false }));
+                }
+            });
     }, []);
 
     // ── KPIs ─────────────────────────────────────────────────────────

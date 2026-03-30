@@ -24,12 +24,24 @@ export function useStudentsDashboard() {
     const [dashStudentQuery, setDashStudentQuery] = useState('');
     const [dashStatusFilter, setDashStatusFilter] = useState<'all' | 'approved' | 'pending'>('all');
 
-    // ── Carga inicial ────────────────────────────────────────────────
+    // ── Carga inicial (async) ─────────────────────────────────────────
 
     useEffect(() => {
-        const all = getStudents();
-        setStudents(all);
-        setRecentStudents(getRecentStudents(5));
+        let canceled = false;
+
+        const load = async () => {
+            const [all, recent] = await Promise.all([
+                getStudents(),
+                getRecentStudents(5),
+            ]);
+            if (!canceled) {
+                setStudents(all);
+                setRecentStudents(recent);
+            }
+        };
+
+        load();
+        return () => { canceled = true; };
     }, []);
 
     // ── KPIs computados ─────────────────────────────────────────────

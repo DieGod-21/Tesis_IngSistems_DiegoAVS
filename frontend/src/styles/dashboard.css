@@ -516,10 +516,9 @@
     color: #dc2626;
 }
 
-/* Barra de progreso — SIN inline style.
-   La anchura se define por clase. Solo hay un valor de progreso
-   en los datos mock (76), así que definimos esa clase.
-   Para otros porcentajes futuros, agregar aquí. */
+/* Barra de progreso — usa CSS custom property --kpi-progress
+   definida inline desde KpiCard.tsx. Cualquier valor 0-100 funciona
+   sin necesidad de agregar clases adicionales. */
 .kpi-card__progress-track {
     width: 100%;
     height: 8px;
@@ -533,23 +532,8 @@
     height: 100%;
     background: var(--umg-navy);
     border-radius: 99px;
-}
-
-/* Valor específico 76 — añadir más clases si los datos cambian */
-.kpi-card__progress-bar--76 {
-    width: 76%;
-}
-
-.kpi-card__progress-bar--50 {
-    width: 50%;
-}
-
-.kpi-card__progress-bar--25 {
-    width: 25%;
-}
-
-.kpi-card__progress-bar--100 {
-    width: 100%;
+    width: var(--kpi-progress, 0%);
+    transition: width 0.4s ease;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
