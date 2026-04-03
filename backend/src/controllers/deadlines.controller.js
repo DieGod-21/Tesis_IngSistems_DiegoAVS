@@ -1,6 +1,9 @@
 const pool = require('../db/pool');
 const { FASES_VALIDAS } = require('../constants');
 
+const DEADLINE_COLS = `id, titulo, descripcion, fecha, semester_id,
+                       fase_academica, created_by, created_at, updated_at`;
+
 const getAll = async (req, res, next) => {
   try {
     const { semester_id, fase_academica } = req.query;
@@ -9,7 +12,7 @@ const getAll = async (req, res, next) => {
       return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
     }
 
-    let query = 'SELECT * FROM academic_deadlines WHERE 1=1';
+    let query = `SELECT ${DEADLINE_COLS} FROM academic_deadlines WHERE 1=1`;
     const params = [];
     if (semester_id)    { params.push(semester_id);    query += ` AND semester_id = $${params.length}`; }
     if (fase_academica) { params.push(fase_academica); query += ` AND fase_academica = $${params.length}`; }
@@ -24,7 +27,10 @@ const getAll = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM academic_deadlines WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query(
+      `SELECT ${DEADLINE_COLS} FROM academic_deadlines WHERE id = $1`,
+      [req.params.id]
+    );
     if (!rows.length) return res.status(404).json({ error: 'Fecha límite no encontrada' });
     res.json(rows[0]);
   } catch (err) {
@@ -34,7 +40,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { titulo, descripcion, fecha, semester_id, fase_academica, created_by } = req.body;
+    const { titulo, descripcion, fecha, semester_id, fase_academica } = req.body;
 
     if (!titulo?.trim() || !fecha || !semester_id) {
       return res.status(400).json({ error: 'titulo, fecha y semester_id son requeridos' });
@@ -43,9 +49,13 @@ const create = async (req, res, next) => {
       return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
     }
 
+    const created_by = req.user.user_id;
+
     const { rows } = await pool.query(
-      `INSERT INTO academic_deadlines (id, titulo, descripcion, fecha, semester_id, fase_academica, created_by, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING *`,
+      `INSERT INTO academic_deadlines
+         (id, titulo, descripcion, fecha, semester_id, fase_academica, created_by, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
+       RETURNING ${DEADLINE_COLS}`,
       [titulo.trim(), descripcion?.trim(), fecha, semester_id, fase_academica, created_by]
     );
     res.status(201).json(rows[0]);
@@ -69,7 +79,8 @@ const update = async (req, res, next) => {
          fecha          = COALESCE($3, fecha),
          fase_academica = COALESCE($4, fase_academica),
          updated_at     = NOW()
-       WHERE id = $5 RETURNING *`,
+       WHERE id = $5
+       RETURNING ${DEADLINE_COLS}`,
       [titulo?.trim(), descripcion?.trim(), fecha, fase_academica, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Fecha límite no encontrada' });
@@ -81,7 +92,10 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    const { rowCount } = await pool.query('DELETE FROM academic_deadlines WHERE id = $1', [req.params.id]);
+    const { rowCount } = await pool.query(
+      'DELETE FROM academic_deadlines WHERE id = $1',
+      [req.params.id]
+    );
     if (!rowCount) return res.status(404).json({ error: 'Fecha límite no encontrada' });
     res.status(204).send();
   } catch (err) {

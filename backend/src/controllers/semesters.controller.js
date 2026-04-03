@@ -1,8 +1,12 @@
 const pool = require('../db/pool');
 
+const SEMESTER_COLS = `id, nombre, anio, numero, created_at, updated_at`;
+
 const getAll = async (_req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM semesters ORDER BY anio DESC, numero DESC');
+    const { rows } = await pool.query(
+      `SELECT ${SEMESTER_COLS} FROM semesters ORDER BY anio DESC, numero DESC`
+    );
     res.json(rows);
   } catch (err) {
     next(err);
@@ -11,7 +15,10 @@ const getAll = async (_req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM semesters WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query(
+      `SELECT ${SEMESTER_COLS} FROM semesters WHERE id = $1`,
+      [req.params.id]
+    );
     if (!rows.length) return res.status(404).json({ error: 'Semestre no encontrado' });
     res.json(rows[0]);
   } catch (err) {
@@ -35,7 +42,8 @@ const create = async (req, res, next) => {
 
     const { rows } = await pool.query(
       `INSERT INTO semesters (id, nombre, anio, numero, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW()) RETURNING *`,
+       VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+       RETURNING ${SEMESTER_COLS}`,
       [nombre.trim(), Number(anio), Number(numero)]
     );
     res.status(201).json(rows[0]);
@@ -61,7 +69,8 @@ const update = async (req, res, next) => {
          anio       = COALESCE($2, anio),
          numero     = COALESCE($3, numero),
          updated_at = NOW()
-       WHERE id = $4 RETURNING *`,
+       WHERE id = $4
+       RETURNING ${SEMESTER_COLS}`,
       [nombre?.trim(), anio != null ? Number(anio) : null, numero != null ? Number(numero) : null, req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Semestre no encontrado' });

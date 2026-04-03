@@ -1,22 +1,44 @@
 /**
  * studentsService.ts
  *
- * Servicio de datos para la vista Registro de Estudiantes.
- * Todas las funciones son async con delay 500ms simulado.
- * Para conectar al API real: reemplazar cuerpos con fetch/axios,
- * manteniendo las mismas interfaces y firmas.
+ * Servicio de datos para el módulo de estudiantes.
+ * Consume la API real del backend.
  */
+
+import { apiFetch } from './apiClient';
+import type { BackendStudent } from '../types/student';
 
 // ─── Interfaces ────────────────────────────────────────────────────
 
 /** Dominios válidos para correo institucional */
 export const ALLOWED_EMAIL_DOMAINS = ['@miumg.edu.gt', '@umg.edu.gt'];
 
+/** Fases académicas válidas según el backend */
+export const FASES_VALIDAS = ['anteproyecto', 'tesis', 'eps'] as const;
+export type FaseValida = typeof FASES_VALIDAS[number];
+
+/** Etiquetas de display para cada fase */
+export const FASE_LABELS: Record<FaseValida, string> = {
+    anteproyecto: 'Anteproyecto de Tesis',
+    tesis:        'Tesis de Grado',
+    eps:          'Ejercicio Profesional Supervisado (EPS)',
+};
+
+/** Semestre devuelto por GET /api/semesters */
+export interface Semester {
+    id: string;
+    nombre: string;
+    anio: number;
+    numero: number;
+}
+
+/** Payload para crear un estudiante (campos que envía el formulario) */
 export interface StudentPayload {
     nombreCompleto: string;
     carnetId: string;
     correoInstitucional: string;
-    semestreLectivo: string;
+    /** UUID del semestre */
+    semesterId: string;
     faseAcademica: string;
 }
 
@@ -38,31 +60,43 @@ export interface ImportResult {
     errors: Array<{ row: number; reason: string }>;
 }
 
-/** Ítem de carga reciente */
+/** Ítem de carga reciente (historial local) */
 export interface UploadItem {
     id: string;
     filename: string;
     status: 'success' | 'error' | 'pending';
-    uploadedAt: string; // texto relativo: "Hace 2 horas"
+    uploadedAt: string;
     type: 'excel' | 'pdf';
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────
+// ─── Semesters ──────────────────────────────────────────────────────
 
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+/** Obtiene la lista de semestres desde GET /api/semesters */
+export async function getSemesters(): Promise<Semester[]> {
+    return apiFetch<Semester[]>('/semesters');
 }
 
-function isValidEmail(email: string): boolean {
-    const lower = email.toLowerCase();
-    return ALLOWED_EMAIL_DOMAINS.some((d) => lower.endsWith(d));
+// ─── Estudiantes ─────────────────────────────────────────────────────
+
+/**
+ * Registra un estudiante individualmente via POST /api/students.
+ * El backend espera campos en snake_case.
+ */
+export async function createStudent(payload: StudentPayload): Promise<BackendStudent> {
+    return apiFetch<BackendStudent>('/students', {
+        method: 'POST',
+        body: JSON.stringify({
+            nombre_completo:      payload.nombreCompleto.trim(),
+            carnet_id:            payload.carnetId.trim(),
+            correo_institucional: payload.correoInstitucional.trim(),
+            semester_id:          payload.semesterId,
+            fase_academica:       payload.faseAcademica,
+            approved:             false,
+        }),
+    });
 }
 
-// ─── Persistencia en localStorage ────────────────────────────────────
-//
-// Antes se usaba una variable de módulo (`let _recentUploads`), lo cual
-// provocaba que el historial de cargas se perdiera al recargar la página.
-// Ahora se usa localStorage con el mismo patrón de seed de `student.ts`.
+// ─── Uploads (historial local — no tiene endpoint en backend) ─────────
 
 const UPLOADS_KEY = 'umg_recent_uploads';
 
@@ -83,63 +117,63 @@ const SEED_UPLOADS: UploadItem[] = [
     },
 ];
 
-/** Lee las cargas recientes desde localStorage. Carga datos semilla si no existe. */
 function readUploads(): UploadItem[] {
     try {
         const raw = localStorage.getItem(UPLOADS_KEY);
         if (raw) return JSON.parse(raw) as UploadItem[];
-    } catch {
-        // JSON corrupto → reinicializar
-    }
+    } catch { /* JSON corrupto */ }
     localStorage.setItem(UPLOADS_KEY, JSON.stringify(SEED_UPLOADS));
     return SEED_UPLOADS;
 }
 
-/** Guarda las cargas recientes en localStorage (máx. 10 ítems). */
 function saveUploads(uploads: UploadItem[]): void {
     localStorage.setItem(UPLOADS_KEY, JSON.stringify(uploads.slice(0, 10)));
 }
 
-// ─── API pública ────────────────────────────────────────────────────
-
 /**
- * Registra un estudiante individualmente.
- * Equivalente a POST /api/students
- */
-export async function createStudent(payload: StudentPayload): Promise<void> {
-    await delay(500);
-    // TODO: await fetch('/api/students', { method: 'POST', body: JSON.stringify(payload) });
-    console.info('[studentsService] createStudent', payload);
-}
-
-/**
- * Importa una lista de filas parseadas de Excel/CSV.
- * Equivalente a POST /api/students/import
+ * Importa filas desde Excel/CSV validando formato local.
+ * Si se provee semesterId, los registros válidos se envían al backend.
+ * Sin semesterId solo se valida localmente (útil como previsualización).
  */
 export async function importStudents(
     rows: ParsedRow[],
+    semesterId?: string,
 ): Promise<ImportResult> {
-    await delay(500);
-    // TODO: await fetch('/api/students/import', { method: 'POST', body: JSON.stringify({ rows }) });
     const errors: ImportResult['errors'] = [];
+    let imported = 0;
     let rejected = 0;
 
-    rows.forEach((row) => {
+    for (const row of rows) {
         if (!row.carnetId?.trim()) {
             errors.push({ row: row.rowIndex, reason: 'Carnet vacío' });
             rejected++;
-        } else if (row.correoInstitucional && !isValidEmail(row.correoInstitucional)) {
-            errors.push({
-                row: row.rowIndex,
-                reason: `Correo inválido: ${row.correoInstitucional}`,
+            continue;
+        }
+        if (row.correoInstitucional && !ALLOWED_EMAIL_DOMAINS.some((d) => row.correoInstitucional!.toLowerCase().endsWith(d))) {
+            errors.push({ row: row.rowIndex, reason: `Correo inválido: ${row.correoInstitucional}` });
+            rejected++;
+            continue;
+        }
+        if (!semesterId) {
+            // Sin semesterId: solo validación local, no se envía al backend
+            imported++;
+            continue;
+        }
+        try {
+            await createStudent({
+                nombreCompleto:      row.nombreCompleto ?? '',
+                carnetId:            row.carnetId ?? '',
+                correoInstitucional: row.correoInstitucional ?? '',
+                semesterId,
+                faseAcademica:       row.faseAcademica ?? 'anteproyecto',
             });
+            imported++;
+        } catch {
+            errors.push({ row: row.rowIndex, reason: 'Error al registrar en el servidor' });
             rejected++;
         }
-    });
+    }
 
-    const imported = rows.length - rejected;
-
-    // Persistir nueva carga en historial
     const current = readUploads();
     saveUploads([
         {
@@ -155,14 +189,8 @@ export async function importStudents(
     return { imported, rejected, errors };
 }
 
-/**
- * Sube un PDF al servidor.
- * Equivalente a POST /api/students/upload-pdf
- */
+/** Sube un PDF (historial local, sin endpoint de backend aún). */
 export async function uploadPdf(file: File): Promise<void> {
-    await delay(500);
-    // TODO: const fd = new FormData(); fd.append('file', file); await fetch('/api/students/upload-pdf', { method: 'POST', body: fd });
-
     const current = readUploads();
     saveUploads([
         {
@@ -176,12 +204,7 @@ export async function uploadPdf(file: File): Promise<void> {
     ]);
 }
 
-/**
- * Obtiene las cargas recientes.
- * Equivalente a GET /api/students/uploads
- */
+/** Obtiene el historial de cargas recientes. */
 export async function getRecentUploads(): Promise<UploadItem[]> {
-    await delay(300);
-    // TODO: return await fetch('/api/students/uploads').then(r => r.json());
     return readUploads();
 }

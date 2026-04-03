@@ -5,15 +5,14 @@
  * Persiste la sesión en localStorage para que sobreviva recargas.
  *
  * Claves de localStorage:
- *   auth_token → token de sesión (opaco / JWT en producción)
+ *   auth_token → JWT del backend
  *   auth_user  → JSON del objeto User
- *
- * Para conectar al API real: reemplazar las funciones mock con fetch/axios,
- * manteniendo la misma firma. El AuthContext NO cambia.
  */
 
+import { apiFetch } from './apiClient';
+
 const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
+const USER_KEY  = 'auth_user';
 
 export interface User {
   id: string;
@@ -27,11 +26,25 @@ export interface LoginCredentials {
   password: string;
 }
 
-// ─── Mock ────────────────────────────────────────────────────────────
+// ─── Helpers JWT ─────────────────────────────────────────────────────
 
-const MOCK_CREDENTIALS = { email: 'admin@demo.com', password: '123456' };
-const MOCK_USER: User = { id: '1', email: 'admin@demo.com', name: 'Administrador Demo', role: 'admin' };
-const MOCK_TOKEN = 'mock-jwt-token-abc123';
+interface JwtPayload {
+  user_id: string;
+  roles: string[];
+  exp: number;
+}
+
+function parseJwt(token: string): JwtPayload {
+  const base64Url = token.split('.')[1];
+  const base64    = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const json      = decodeURIComponent(
+    atob(base64)
+      .split('')
+      .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join(''),
+  );
+  return JSON.parse(json) as JwtPayload;
+}
 
 // ─── Persistencia ───────────────────────────────────────────────────
 
@@ -39,12 +52,11 @@ const MOCK_TOKEN = 'mock-jwt-token-abc123';
 export function readPersistedSession(): { user: User; token: string } | null {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
-    const raw = localStorage.getItem(USER_KEY);
+    const raw   = localStorage.getItem(USER_KEY);
     if (!token || !raw) return null;
     const user = JSON.parse(raw) as User;
     return { user, token };
   } catch {
-    // JSON corrupto → limpiar
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     return null;
@@ -64,36 +76,46 @@ function clearSession(): void {
 // ─── API pública ────────────────────────────────────────────────────
 
 /**
- * Autentica al usuario y persiste la sesión.
- * TODO: reemplazar con → fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+ * Autentica al usuario contra POST /api/auth/login.
+ * El backend espera { correo_electronico, contrasena } y retorna { token }.
+ * Se decodifica el JWT para extraer user_id y roles.
  */
 export const login = async (email: string, password: string): Promise<User> => {
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  const { token } = await apiFetch<{ token: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ correo_electronico: email, contrasena: password }),
+  });
 
-  if (email === MOCK_CREDENTIALS.email && password === MOCK_CREDENTIALS.password) {
-    persistSession(MOCK_USER, MOCK_TOKEN);
-    return MOCK_USER;
-  }
+  const payload = parseJwt(token);
+  const user: User = {
+    id:    payload.user_id,
+    email: email.trim().toLowerCase(),
+    name:  email.split('@')[0],   // El backend no devuelve nombre en el token
+    role:  payload.roles?.[0] ?? 'user',
+  };
 
-  throw new Error('Credenciales incorrectas. Verifique su correo y contraseña.');
+  persistSession(user, token);
+  return user;
 };
 
 /**
  * Cierra sesión y limpia el localStorage.
- * TODO: reemplazar con → fetch('/api/auth/logout', { method: 'POST' })
  */
 export const logout = async (): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, 200));
   clearSession();
 };
 
 /**
- * Verifica si un token sigue siendo válido en el servidor.
- * TODO: reemplazar con → fetch('/api/auth/verify', { headers: { Authorization: `Bearer ${token}` } })
- * Por ahora devuelve siempre true si existe el token (mock).
+ * Verifica si el JWT almacenado sigue siendo válido
+ * comparando su campo `exp` con el tiempo actual.
+ * No realiza llamada al servidor (validación local).
  */
 export const verifyToken = async (token: string): Promise<boolean> => {
   if (!token) return false;
-  // En producción: llamar al endpoint de verificación
-  return token === MOCK_TOKEN;
+  try {
+    const payload = parseJwt(token);
+    return payload.exp > Date.now() / 1000;
+  } catch {
+    return false;
+  }
 };

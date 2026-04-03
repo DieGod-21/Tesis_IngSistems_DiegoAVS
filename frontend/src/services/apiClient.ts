@@ -45,8 +45,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     });
 
     if (!res.ok) {
-        const errorText = await res.text().catch(() => 'Error desconocido');
-        throw new Error(errorText || `HTTP ${res.status}`);
+        const errorText = await res.text().catch(() => '');
+        // Extraer el campo "error" o "message" del JSON de respuesta del backend
+        let userMessage = errorText || `Error HTTP ${res.status}`;
+        try {
+            const parsed = JSON.parse(errorText) as { error?: string; message?: string };
+            if (parsed.error) userMessage = parsed.error;
+            else if (parsed.message) userMessage = parsed.message;
+        } catch { /* no es JSON — usar el texto tal cual */ }
+        throw new Error(userMessage);
     }
 
     // 204 No Content: sin body — evita SyntaxError al llamar .json()

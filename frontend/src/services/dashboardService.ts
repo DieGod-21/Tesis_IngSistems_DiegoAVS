@@ -1,19 +1,17 @@
 /**
  * dashboardService.ts
  *
- * Fuente única de datos para el Panel de Control PG1-PG2.
- * Universidad Mariano Gálvez — Coordinación de Proyecto de Graduación.
+ * Fuente de datos para el Panel de Control.
+ * - KPIs: calculados dinámicamente desde GET /api/students
+ * - Acciones pendientes: estudiantes sin aprobar (approved = false)
+ * - Deadlines: estáticos (el backend tiene /api/deadlines pero sin datos semilla definidos)
+ * - Recursos: estáticos
  *
- * Las funciones son async con delay simulado (sin backend aún).
- * Para conectar al API institucional real:
- *   reemplazar el cuerpo de cada función con fetch/axios
- *   manteniendo las mismas interfaces y firmas.
- *
- * TODO: Integrar API institucional GET /api/dashboard/summary
- * TODO: Integrar API GET /api/acciones-pendientes?q=...
- * TODO: Integrar servicio de notificaciones por correo institucional
- * TODO: Integrar API de eventos del Calendario Académico
+ * Universidad Mariano Gálvez — Coordinación de Proyecto de Graduación
  */
+
+import { apiFetch } from './apiClient';
+import type { BackendStudent } from '../types/student';
 
 // ─── Interfaces ────────────────────────────────────────────────────
 
@@ -36,7 +34,7 @@ export interface PendingAction {
     avatarInitials: string;
     avatarVariant: 'blue' | 'green' | 'slate';
     projectTitle: string;
-    phase: 'PG1' | 'PG2';
+    phase: string;
     actionLabel: string;
     actionVariant: 'danger' | 'warning' | 'urgent';
     deadline: string;
@@ -58,7 +56,6 @@ export interface FacultyResource {
     href: string;
 }
 
-/** Resumen completo del dashboard (KPIs + deadlines + resources) */
 export interface DashboardSummary {
     kpis: KpiData[];
     deadlines: Deadline[];
@@ -67,161 +64,147 @@ export interface DashboardSummary {
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/** Simula latencia de red. Reemplazar por fetch real en producción. */
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+function initials(name: string): string {
+    return name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? '')
+        .join('');
 }
 
-// ─── Datos estáticos (mock) ─────────────────────────────────────────
+const AVATAR_VARIANTS: Array<'blue' | 'green' | 'slate'> = ['blue', 'green', 'slate'];
 
-const MOCK_KPIS: KpiData[] = [
-    {
-        id: 'kpi-pg1',
-        label: 'Total PG1',
-        value: '142',
-        trend: '+4%',
-        trendPositive: true,
-        description: 'Propedéutico de Tesis',
-        iconName: 'FileText',
-        iconVariant: 'blue',
-    },
-    {
-        id: 'kpi-pg2',
-        label: 'Total PG2',
-        value: '89',
-        trend: '+12%',
-        trendPositive: true,
-        description: 'Desarrollo de Tesis',
-        iconName: 'GraduationCap',
-        iconVariant: 'blue',
-    },
-    {
-        id: 'kpi-risk',
-        label: 'En Riesgo',
-        value: '14',
-        trend: '+2',
-        trendPositive: false,
-        description: 'Requieren atención inmediata',
-        iconName: 'AlertTriangle',
-        iconVariant: 'red',
-    },
-    {
-        id: 'kpi-completion',
-        label: 'Completación',
-        value: '76%',
-        trend: '↑ 3%',
-        trendPositive: true,
-        description: '',
-        iconName: 'CheckCircle',
-        iconVariant: 'blue',
-        progressValue: 76,
-    },
-];
+// ─── Datos estáticos ────────────────────────────────────────────────
 
-const MOCK_ACTIONS: PendingAction[] = [
-    {
-        id: 'pa-1',
-        studentName: 'Ana Martínez',
-        studentId: '0901-21-1234',
-        avatarInitials: 'AM',
-        avatarVariant: 'blue',
-        projectTitle: 'Gestión de Inventarios…',
-        phase: 'PG1',
-        actionLabel: 'Revisión de Anteproyecto',
-        actionVariant: 'danger',
-        deadline: 'Semáforo rojo',
-        deadlineUrgent: true,
-    },
-    {
-        id: 'pa-2',
-        studentName: 'Juan González',
-        studentId: '0901-20-5678',
-        avatarInitials: 'JG',
-        avatarVariant: 'green',
-        projectTitle: 'IA en Ciberseguridad…',
-        phase: 'PG2',
-        actionLabel: 'Aprobación de Capítulos',
-        actionVariant: 'warning',
-        deadline: 'Pendiente de firma',
-    },
-    {
-        id: 'pa-3',
-        studentName: 'Sofía Ramírez',
-        studentId: '0901-22-9988',
-        avatarInitials: 'SR',
-        avatarVariant: 'slate',
-        projectTitle: 'Optimización de Redes…',
-        phase: 'PG1',
-        actionLabel: 'Urgente — Defensa Próxima',
-        actionVariant: 'urgent',
-        deadline: 'Hoy',
-        deadlineUrgent: true,
-    },
-];
-
-const MOCK_DEADLINES: Deadline[] = [
+const STATIC_DEADLINES: Deadline[] = [
     {
         id: 'dl-1',
-        month: 'Mar',
-        day: '28',
-        title: 'Cierre de Anteproyectos',
-        subtitle: 'Cohorte PG1 — Primer Semestre 2026',
+        month: 'Abr',
+        day: '15',
+        title: 'Revisión de Anteproyectos',
+        subtitle: 'Fase Anteproyecto — Primer Semestre 2026',
     },
     {
         id: 'dl-2',
-        month: 'Abr',
-        day: '15',
-        title: 'Revisión de Capítulos I-III',
-        subtitle: 'Tesis PG2 — Estudiantes con Asesor Asignado',
+        month: 'May',
+        day: '09',
+        title: 'Entrega de Capítulos I-III',
+        subtitle: 'Tesis — Estudiantes con Asesor Asignado',
     },
     {
         id: 'dl-3',
-        month: 'May',
-        day: '09',
+        month: 'Jun',
+        day: '20',
         title: 'Defensas Privadas',
         subtitle: 'Salón B-102 — Fase Final de Graduación',
     },
 ];
 
-// Recursos de Facultad — año dinámico
 const currentYear = new Date().getFullYear();
-const MOCK_RESOURCES: FacultyResource[] = [
+const STATIC_RESOURCES: FacultyResource[] = [
     { id: 'res-1', label: `Guía Normativa ${currentYear}`, iconName: 'Download', href: '#' },
-    { id: 'res-2', label: 'Plantillas LaTeX / Word', iconName: 'File', href: '#' },
-    { id: 'res-3', label: 'Repositorio Institucional de Tesis', iconName: 'Link', href: '#' },
+    { id: 'res-2', label: 'Plantillas LaTeX / Word',        iconName: 'File',     href: '#' },
+    { id: 'res-3', label: 'Repositorio Institucional',      iconName: 'Link',     href: '#' },
 ];
 
 // ─── API pública ────────────────────────────────────────────────────
 
 /**
- * Devuelve KPIs, deadlines y recursos en una sola llamada.
- * Equivalente a GET /api/dashboard/summary en producción.
+ * Obtiene el resumen del dashboard.
+ * Los KPIs se calculan a partir de los datos reales de estudiantes.
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-    await delay(500);
-    // TODO: return await fetch('/api/dashboard/summary').then(r => r.json());
+    const students = await apiFetch<BackendStudent[]>('/students');
+
+    const total       = students.length;
+    const approved    = students.filter((s) => s.approved).length;
+    const pending     = total - approved;
+    const anteproyecto = students.filter((s) => s.fase_academica === 'anteproyecto').length;
+    const tesis       = students.filter((s) => s.fase_academica === 'tesis').length;
+    const eps         = students.filter((s) => s.fase_academica === 'eps').length;
+
+    const completionPct = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+    const kpis: KpiData[] = [
+        {
+            id: 'kpi-anteproyecto',
+            label: 'Anteproyecto',
+            value: String(anteproyecto),
+            trend: '',
+            trendPositive: true,
+            description: 'Estudiantes en fase de anteproyecto',
+            iconName: 'FileText',
+            iconVariant: 'blue',
+        },
+        {
+            id: 'kpi-tesis-eps',
+            label: 'Tesis / EPS',
+            value: String(tesis + eps),
+            trend: '',
+            trendPositive: true,
+            description: `${tesis} en tesis · ${eps} en EPS`,
+            iconName: 'GraduationCap',
+            iconVariant: 'blue',
+        },
+        {
+            id: 'kpi-pending',
+            label: 'Sin Aprobar',
+            value: String(pending),
+            trend: '',
+            trendPositive: pending === 0,
+            description: 'Expedientes pendientes de revisión',
+            iconName: 'AlertTriangle',
+            iconVariant: pending > 0 ? 'red' : 'blue',
+        },
+        {
+            id: 'kpi-completion',
+            label: 'Completación',
+            value: `${completionPct}%`,
+            trend: '',
+            trendPositive: true,
+            description: `${approved} de ${total} aprobados`,
+            iconName: 'CheckCircle',
+            iconVariant: 'blue',
+            progressValue: completionPct,
+        },
+    ];
+
     return {
-        kpis: MOCK_KPIS,
-        deadlines: MOCK_DEADLINES,
-        resources: MOCK_RESOURCES,
+        kpis,
+        deadlines: STATIC_DEADLINES,
+        resources: STATIC_RESOURCES,
     };
 }
 
 /**
- * Devuelve acciones pendientes, opcionalmente filtradas por query.
- * Equivalente a GET /api/pending-actions?q=... en producción.
+ * Devuelve estudiantes sin aprobar como acciones pendientes.
+ * Filtra opcionalmente por query.
  */
 export async function getPendingActions(query?: string): Promise<PendingAction[]> {
-    await delay(500);
-    // TODO: return await fetch(`/api/pending-actions?q=${query ?? ''}`).then(r => r.json());
-    if (!query || query.trim() === '') {
-        return MOCK_ACTIONS;
-    }
-    const q = query.trim().toLowerCase();
-    return MOCK_ACTIONS.filter(
-        (a) =>
-            a.studentName.toLowerCase().includes(q) ||
-            a.studentId.toLowerCase().includes(q) ||
-            a.projectTitle.toLowerCase().includes(q),
-    );
+    const students = await apiFetch<BackendStudent[]>('/students?approved=false');
+
+    const q = query?.trim().toLowerCase() ?? '';
+
+    return students
+        .filter((s) => {
+            if (!q) return true;
+            return (
+                s.nombre_completo.toLowerCase().includes(q) ||
+                s.carnet_id.toLowerCase().includes(q)
+            );
+        })
+        .map((s, i): PendingAction => ({
+            id:            s.id,
+            studentName:   s.nombre_completo,
+            studentId:     s.carnet_id,
+            avatarInitials: initials(s.nombre_completo),
+            avatarVariant: AVATAR_VARIANTS[i % AVATAR_VARIANTS.length],
+            projectTitle:  s.correo_institucional,
+            phase:         s.fase_academica,
+            actionLabel:   'Pendiente de aprobación',
+            actionVariant: 'warning',
+            deadline:      'Sin fecha límite',
+            deadlineUrgent: false,
+        }));
 }

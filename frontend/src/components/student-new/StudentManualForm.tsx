@@ -2,48 +2,46 @@
  * StudentManualForm.tsx
  *
  * Formulario de registro manual de estudiantes.
- * Usa el hook genérico useForm para manejo de estado + validación.
- * Validación onBlur + onSubmit (no onChange).
- * Reserva espacio fijo para mensajes de error (sin layout shift).
- * IonToast para feedback de éxito/error.
+ * - Carga semestres dinámicamente desde GET /api/semesters
+ * - Usa las fases académicas reales del backend: anteproyecto, tesis, eps
+ * - Valida y envía via POST /api/students
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { IonToast } from '@ionic/react';
 import { User, CreditCard, Mail, BookOpen, GraduationCap, Save, Trash2 } from 'lucide-react';
 import {
     createStudent,
+    getSemesters,
+    FASE_LABELS,
+    FASES_VALIDAS,
 } from '../../services/studentsService';
-import type { StudentPayload } from '../../services/studentsService';
+import type { StudentPayload, Semester } from '../../services/studentsService';
 import { useForm } from '../../hooks/useForm';
 import { runValidators, validators } from '../../utils/validators';
 
-// ─── Constantes ──────────────────────────────────────────────────────
+// ─── Tipo del formulario ─────────────────────────────────────────────
 
-const EMPTY_FORM: Record<keyof StudentPayload, string> = {
-    nombreCompleto: '',
-    carnetId: '',
-    correoInstitucional: '',
-    semestreLectivo: '',
-    faseAcademica: '',
+type FormFields = {
+    nombreCompleto:      string;
+    carnetId:            string;
+    correoInstitucional: string;
+    semesterId:          string;
+    faseAcademica:       string;
 };
 
-const SEMESTRES = [
-    'Primer Semestre 2024',
-    'Segundo Semestre 2024',
-    'Primer Semestre 2025',
-    'Segundo Semestre 2025',
-];
+const EMPTY_FORM: FormFields = {
+    nombreCompleto:      '',
+    carnetId:            '',
+    correoInstitucional: '',
+    semesterId:          '',
+    faseAcademica:       '',
+};
 
-const FASES = [
-    { value: 'PG1', label: 'Proyecto de Graduación 1 (PG1)' },
-    { value: 'PG2', label: 'Proyecto de Graduación 2 (PG2)' },
-];
+// ─── Validación ──────────────────────────────────────────────────────
 
-// ─── Validación centralizada ─────────────────────────────────────────
-
-function validate(values: Record<keyof StudentPayload, string>) {
-    const errors: Partial<Record<keyof StudentPayload, string>> = {};
+function validate(values: FormFields) {
+    const errors: Partial<FormFields> = {};
 
     const nombre = runValidators(values.nombreCompleto, validators.required('El nombre completo'));
     if (nombre) errors.nombreCompleto = nombre;
@@ -59,8 +57,8 @@ function validate(values: Record<keyof StudentPayload, string>) {
     );
     if (correo) errors.correoInstitucional = correo;
 
-    const semestre = validators.select('un semestre')(values.semestreLectivo);
-    if (semestre) errors.semestreLectivo = semestre;
+    const semestre = validators.select('un semestre')(values.semesterId);
+    if (semestre) errors.semesterId = semestre;
 
     const fase = validators.select('una fase académica')(values.faseAcademica);
     if (fase) errors.faseAcademica = fase;
@@ -68,26 +66,44 @@ function validate(values: Record<keyof StudentPayload, string>) {
     return errors;
 }
 
-// ─── Componente ─────────────────────────────────────────────────────
+// ─── Componente ──────────────────────────────────────────────────────
 
 const StudentManualForm: React.FC = () => {
-    const [toast, setToast] = useState<{ open: boolean; message: string; color: string }>({
-        open: false,
-        message: '',
-        color: 'success',
+    const [semesters, setSemesters]       = useState<Semester[]>([]);
+    const [semLoading, setSemLoading]     = useState(true);
+    const [toast, setToast]               = useState<{ open: boolean; message: string; color: string }>({
+        open: false, message: '', color: 'success',
     });
 
+    // Carga semestres al montar
+    useEffect(() => {
+        let canceled = false;
+        getSemesters()
+            .then((data) => { if (!canceled) setSemesters(data); })
+            .catch(() => { /* silencioso — select queda vacío */ })
+            .finally(() => { if (!canceled) setSemLoading(false); });
+        return () => { canceled = true; };
+    }, []);
+
     const { values, submitting, handleChange, handleBlur, handleSubmit, reset, showError } =
-        useForm({
+        useForm<FormFields>({
             initialValues: EMPTY_FORM,
             validate,
             onSubmit: async (vals) => {
                 try {
-                    await createStudent(vals);
+                    const payload: StudentPayload = {
+                        nombreCompleto:      vals.nombreCompleto,
+                        carnetId:            vals.carnetId,
+                        correoInstitucional: vals.correoInstitucional,
+                        semesterId:          vals.semesterId,
+                        faseAcademica:       vals.faseAcademica,
+                    };
+                    await createStudent(payload);
                     setToast({ open: true, message: 'Estudiante registrado exitosamente.', color: 'success' });
-                } catch {
-                    setToast({ open: true, message: 'Error al registrar. Intenta de nuevo.', color: 'danger' });
-                    throw new Error('submit failed'); // re-throw para que useForm no haga reset
+                } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : 'Error al registrar. Intenta de nuevo.';
+                    setToast({ open: true, message: msg, color: 'danger' });
+                    throw err; // re-throw para que useForm no haga reset
                 }
             },
         });
@@ -180,25 +196,28 @@ const StudentManualForm: React.FC = () => {
                             <label className="sn-form__label" htmlFor="sn-semestre">
                                 Semestre Lectivo <span className="sn-form__required">*</span>
                             </label>
-                            <div className={`sn-field${showError('semestreLectivo') ? ' sn-field--error' : ''}`}>
+                            <div className={`sn-field${showError('semesterId') ? ' sn-field--error' : ''}`}>
                                 <BookOpen size={16} className="sn-field__icon" aria-hidden="true" />
                                 <select
                                     id="sn-semestre"
                                     className="sn-field__input sn-field__select"
-                                    value={values.semestreLectivo}
-                                    onChange={(e) => handleChange('semestreLectivo', e.target.value)}
-                                    onBlur={() => handleBlur('semestreLectivo')}
+                                    value={values.semesterId}
+                                    onChange={(e) => handleChange('semesterId', e.target.value)}
+                                    onBlur={() => handleBlur('semesterId')}
                                     aria-describedby="sn-semestre-error"
-                                    aria-invalid={!!showError('semestreLectivo')}
+                                    aria-invalid={!!showError('semesterId')}
+                                    disabled={semLoading}
                                 >
-                                    <option value="">Seleccionar semestre</option>
-                                    {SEMESTRES.map((s) => (
-                                        <option key={s} value={s}>{s}</option>
+                                    <option value="">
+                                        {semLoading ? 'Cargando semestres…' : 'Seleccionar semestre'}
+                                    </option>
+                                    {semesters.map((s) => (
+                                        <option key={s.id} value={s.id}>{s.nombre}</option>
                                     ))}
                                 </select>
                             </div>
                             <p id="sn-semestre-error" className="sn-field__error" role="alert">
-                                {showError('semestreLectivo') ?? ''}
+                                {showError('semesterId') ?? ''}
                             </p>
                         </div>
 
@@ -218,8 +237,8 @@ const StudentManualForm: React.FC = () => {
                                     aria-invalid={!!showError('faseAcademica')}
                                 >
                                     <option value="">Seleccionar fase</option>
-                                    {FASES.map((f) => (
-                                        <option key={f.value} value={f.value}>{f.label}</option>
+                                    {FASES_VALIDAS.map((f) => (
+                                        <option key={f} value={f}>{FASE_LABELS[f]}</option>
                                     ))}
                                 </select>
                             </div>
@@ -253,7 +272,6 @@ const StudentManualForm: React.FC = () => {
                 </form>
             </div>
 
-            {/* Toast feedback */}
             <IonToast
                 isOpen={toast.open}
                 message={toast.message}

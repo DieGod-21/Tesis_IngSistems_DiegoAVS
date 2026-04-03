@@ -324,14 +324,21 @@
     font-weight: 700;
 }
 
-.sl-phase-badge--pg1 {
+.sl-phase-badge--pg1,
+.sl-phase-badge--anteproyecto {
     background: rgba(0, 51, 102, 0.08);
     color: var(--umg-navy);
 }
 
-.sl-phase-badge--pg2 {
+.sl-phase-badge--pg2,
+.sl-phase-badge--tesis {
     background: rgba(204, 0, 0, 0.08);
     color: var(--umg-red);
+}
+
+.sl-phase-badge--eps {
+    background: rgba(0, 120, 80, 0.10);
+    color: #005c3c;
 }
 
 /* Columna de toggle */

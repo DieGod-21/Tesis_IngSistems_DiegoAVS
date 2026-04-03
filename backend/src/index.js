@@ -14,17 +14,21 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json({ limit: '1mb' }));
 
-app.use('/api/users',        require('./routes/users.routes'));
-app.use('/api/students',     require('./routes/students.routes'));
-app.use('/api/projects',     require('./routes/projects.routes'));
-app.use('/api/semesters',    require('./routes/semesters.routes'));
-app.use('/api/deliverables', require('./routes/deliverables.routes'));
-app.use('/api/submissions',  require('./routes/submissions.routes'));
-app.use('/api/evaluations',  require('./routes/evaluations.routes'));
-app.use('/api/events',       require('./routes/events.routes'));
-app.use('/api/deadlines',    require('./routes/deadlines.routes'));
+// Ruta pública — debe ir ANTES de las rutas protegidas
+app.use('/api/auth', require('./routes/auth.routes'));
 
-app.get('/', (req, res) => {
+// Rutas protegidas por JWT (cada router aplica su propia capa de autorización)
+app.use('/api/users', require('./routes/users.routes'));
+app.use('/api/students', require('./routes/students.routes'));
+app.use('/api/projects', require('./routes/projects.routes'));
+app.use('/api/semesters', require('./routes/semesters.routes'));
+app.use('/api/deliverables', require('./routes/deliverables.routes'));
+app.use('/api/submissions', require('./routes/submissions.routes'));
+app.use('/api/evaluations', require('./routes/evaluations.routes'));
+app.use('/api/events', require('./routes/events.routes'));
+app.use('/api/deadlines', require('./routes/deadlines.routes'));
+
+app.get('/', (_req, res) => {
   res.json({ message: 'Backend tesis_db funcionando correctamente', version: '1.0.0' });
 });
 

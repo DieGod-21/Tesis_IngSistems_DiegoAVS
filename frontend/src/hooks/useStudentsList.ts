@@ -64,8 +64,12 @@ export function useStudentsList() {
         );
         setToggling((t) => ({ ...t, [id]: true }));
 
-        // 2. Persistir en store (async). Para API real: reemplazar con fetch PATCH.
+        // 2. Persistir via API (async) con UI optimista.
         updateStudentStatus(id, next)
+            .then((updated) => {
+                // Sincronizar con la lista fresca del servidor
+                if (isMountedRef.current) setStudents(updated);
+            })
             .catch(() => {
                 // Rollback solo si el componente sigue montado
                 if (isMountedRef.current) {
