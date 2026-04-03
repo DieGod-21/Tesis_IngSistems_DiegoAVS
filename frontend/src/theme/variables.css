@@ -55,6 +55,7 @@
     --dash-transition: 150ms ease;
     --transition-fast: 120ms ease;
     --transition-base: 200ms ease;
+    --transition-slow: 350ms ease;
 
     /* ── Radio ── */
     --radius-sm:  0.375rem;
@@ -64,4 +65,57 @@
 
     /* ── Tipografía ── */
     --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+
+    /* ── Sidebar gradiente animado ── */
+    --sidebar-grad-start:  #1a2340;
+    --sidebar-grad-mid1:   #0f3460;
+    --sidebar-grad-mid2:   #7b1a35;
+    --sidebar-grad-end:    #c8102e;
+
+    /* ── Toast ── */
+    --toast-success-bg:  #f0fdf4;
+    --toast-success-border: #86efac;
+    --toast-error-bg:    #fff1f2;
+    --toast-error-border:#fca5a5;
+    --toast-info-bg:     #eff6ff;
+    --toast-info-border: #93c5fd;
+    --toast-warning-bg:  #fffbeb;
+    --toast-warning-border:#fcd34d;
+}
+
+/* ── Keyframes globales ───────────────────────────────────────────── */
+
+@keyframes sidebar-wave {
+    0%   { background-position: 0% 50%;   }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%;   }
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(110%); }
+    to   { opacity: 1; transform: translateX(0);    }
+}
+
+@keyframes toast-out {
+    from { opacity: 1; transform: translateX(0);    }
+    to   { opacity: 0; transform: translateX(110%); }
+}
+
+@keyframes count-up-fade {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes dropzone-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(200, 16, 46, 0.25); }
+    50%       { box-shadow: 0 0 0 8px rgba(200, 16, 46, 0);  }
+}
+
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
 }

@@ -235,7 +235,7 @@
 
 .sl-table__tr {
     border-bottom: 1px solid var(--dash-border);
-    transition: background 150ms ease;
+    transition: background 150ms ease, box-shadow 150ms ease;
 }
 
 .sl-table__tr:last-child {
@@ -243,7 +243,8 @@
 }
 
 .sl-table__tr:hover {
-    background: #f8fafc;
+    background: #f0f4ff;
+    box-shadow: inset 3px 0 0 var(--umg-navy);
 }
 
 .sl-table__td {
@@ -292,53 +293,67 @@
     color: var(--dash-text-muted);
 }
 
-/* Badges */
+/* Badges de estado */
 .sl-badge {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 9px;
+    padding: 4px 10px;
     border-radius: 20px;
     font-size: 0.7rem;
     font-weight: 700;
     white-space: nowrap;
+    transition: filter 150ms ease, transform 150ms ease;
+    border: 1px solid transparent;
+}
+
+.sl-badge:hover {
+    filter: brightness(0.95);
+    transform: scale(1.04);
 }
 
 .sl-badge--approved {
     background: #dcfce7;
     color: #15803d;
+    border-color: #86efac;
 }
 
 .sl-badge--pending {
     background: #fef9c3;
     color: #92400e;
+    border-color: #fcd34d;
 }
 
 /* Phase badge */
 .sl-phase-badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 3px 9px;
+    border-radius: 6px;
     font-size: 0.7rem;
     font-weight: 700;
+    transition: filter 150ms ease;
+    border: 1px solid transparent;
 }
 
 .sl-phase-badge--pg1,
 .sl-phase-badge--anteproyecto {
-    background: rgba(0, 51, 102, 0.08);
+    background: rgba(26, 35, 64, 0.08);
     color: var(--umg-navy);
+    border-color: rgba(26, 35, 64, 0.18);
 }
 
 .sl-phase-badge--pg2,
 .sl-phase-badge--tesis {
-    background: rgba(204, 0, 0, 0.08);
+    background: rgba(200, 16, 46, 0.08);
     color: var(--umg-red);
+    border-color: rgba(200, 16, 46, 0.18);
 }
 
 .sl-phase-badge--eps {
-    background: rgba(0, 120, 80, 0.10);
+    background: rgba(0, 120, 80, 0.08);
     color: #005c3c;
+    border-color: rgba(0, 120, 80, 0.18);
 }
 
 /* Columna de toggle */

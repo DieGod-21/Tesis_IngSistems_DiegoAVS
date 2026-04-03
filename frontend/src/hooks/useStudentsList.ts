@@ -20,6 +20,7 @@ import {
     computeStudentKpis,
 } from '../services/studentStore';
 import type { Student } from '../types/student';
+import { useToast } from '../context/ToastContext';
 
 export type StatusFilter = 'all' | 'approved' | 'pending';
 
@@ -32,6 +33,7 @@ export function useStudentsList() {
     const [toggling, setToggling] = useState<Record<string, boolean>>({});
     // Evita setState en componente desmontado (Promise puede resolver tarde)
     const isMountedRef = useRef(true);
+    const { toast } = useToast();
 
     // ── Carga inicial (async) ─────────────────────────────────────────
 
@@ -68,12 +70,16 @@ export function useStudentsList() {
         updateStudentStatus(id, next)
             .then((updated) => {
                 // Sincronizar con la lista fresca del servidor
-                if (isMountedRef.current) setStudents(updated);
+                if (isMountedRef.current) {
+                    setStudents(updated);
+                    toast.success(next ? 'Estudiante aprobado correctamente' : 'Aprobación revertida');
+                }
             })
             .catch(() => {
                 // Rollback solo si el componente sigue montado
                 if (isMountedRef.current) {
                     setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
+                    toast.error('No se pudo actualizar el estado. Intenta de nuevo.');
                 }
             })
             .finally(() => {

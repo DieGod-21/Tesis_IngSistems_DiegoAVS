@@ -10,22 +10,38 @@
 import React from 'react';
 import { resolveIcon } from '../utils/iconRegistry';
 import type { KpiData } from '../services/dashboardService';
+import { useCountUp } from '../hooks/useCountUp';
 
 interface KpiCardProps {
     data: KpiData;
 }
 
+/** Extrae el número de un valor como "42" o "18", retorna null si no es numérico puro */
+function toNumeric(val: string | number): number | null {
+    const n = Number(val);
+    return Number.isFinite(n) && String(val).trim() !== '' ? n : null;
+}
+
+/** Sub-componente que anima un número entero */
+const AnimatedValue: React.FC<{ value: number }> = ({ value }) => {
+    const animated = useCountUp(value);
+    return <>{animated}</>;
+};
+
 const KpiCard: React.FC<KpiCardProps> = ({ data }) => {
     const IconComponent = resolveIcon(data.iconName);
-
+    const numericValue = toNumeric(data.value);
 
     return (
-        <article className={`kpi-card kpi-card--${data.iconVariant}`}>
+        <article className={`kpi-card kpi-card--${data.iconVariant} kpi-card--appear`}>
             <div className="kpi-card__top">
                 <div className="kpi-card__meta">
                     <p className="kpi-card__label">{data.label}</p>
                     <h3 className="kpi-card__value">
-                        {data.value}{' '}
+                        {numericValue !== null
+                            ? <AnimatedValue value={numericValue} />
+                            : data.value
+                        }{' '}
                         <span
                             className={`kpi-card__trend${data.trendPositive ? ' kpi-card__trend--up' : ' kpi-card__trend--down'}`}
                         >

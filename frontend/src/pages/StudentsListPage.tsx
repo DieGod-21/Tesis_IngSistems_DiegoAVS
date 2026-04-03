@@ -224,7 +224,7 @@ const StudentsListPage: React.FC = () => {
                                                 <ApprovalToggle
                                                     checked={student.approved}
                                                     onChange={(next) => handleToggle(student.id, next)}
-                                                    disabled={toggling[student.id]}
+                                                    loading={toggling[student.id]}
                                                     label={student.approved ? 'Aprobado' : 'Pendiente'}
                                                 />
                                             </div>

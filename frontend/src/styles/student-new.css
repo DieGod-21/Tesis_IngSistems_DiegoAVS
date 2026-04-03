@@ -220,30 +220,36 @@
    4. BOTONES
 ═══════════════════════════════════════════════════════════════════ */
 
+/* Botón primario — Rojo sólido para acciones críticas (registrar, importar) */
 .sn-btn-primary {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 10px 22px;
-    background: var(--umg-navy);
+    background: var(--umg-red);
     color: #ffffff;
     border: none;
     border-radius: 8px;
     font-size: 0.875rem;
     font-weight: 700;
     cursor: pointer;
-    box-shadow: var(--dash-shadow-md);
-    transition: opacity var(--dash-transition), transform var(--dash-transition);
+    box-shadow: 0 2px 8px rgba(200, 16, 46, 0.30);
+    transition:
+        background var(--dash-transition),
+        box-shadow var(--dash-transition),
+        transform var(--dash-transition);
     white-space: nowrap;
 }
 
 .sn-btn-primary:hover:not(:disabled) {
-    opacity: 0.88;
+    background: var(--umg-red-dark);
+    box-shadow: 0 4px 14px rgba(200, 16, 46, 0.40);
     transform: translateY(-1px);
 }
 
 .sn-btn-primary:active:not(:disabled) {
     transform: scale(0.97);
+    box-shadow: 0 1px 4px rgba(200, 16, 46, 0.25);
 }
 
 .sn-btn-primary:disabled {
@@ -320,14 +326,31 @@
     padding: 36px 24px;
     text-align: center;
     transition:
-        background var(--dash-transition),
-        border-color var(--dash-transition);
+        background 200ms ease,
+        border-color 200ms ease,
+        transform 200ms ease,
+        box-shadow 200ms ease;
     cursor: default;
 }
 
+.sn-dropzone:hover {
+    background: rgba(26, 35, 64, 0.03);
+    border-color: var(--umg-blue);
+}
+
 .sn-dropzone--over {
-    background: rgba(0, 51, 102, 0.05);
+    background: rgba(200, 16, 46, 0.04);
     border-color: var(--umg-red);
+    transform: scale(1.01);
+    animation: dropzone-pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 0 4px rgba(200, 16, 46, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sn-dropzone--over {
+        animation: none;
+        transform: none;
+    }
 }
 
 .sn-dropzone__icon-wrap {
@@ -454,7 +477,9 @@
 
 .sn-preview__row {
     border-bottom: 1px solid var(--dash-border);
-    transition: background var(--dash-transition);
+    transition: background 150ms ease;
+    /* Filas válidas — fondo levemente verde */
+    background: #f0fdf4;
 }
 
 .sn-preview__row:last-child {
@@ -462,15 +487,26 @@
 }
 
 .sn-preview__row:hover {
-    background: #f8fafc;
+    background: #dcfce7;
 }
 
+/* Fila con error — rojo semántico */
 .sn-preview__row--error {
-    background: #fff5f5;
+    background: #fff1f2;
 }
 
 .sn-preview__row--error:hover {
-    background: #fee2e2;
+    background: #ffe4e6;
+}
+
+/* Ícono estado OK en verde */
+.sn-preview__status-ok {
+    color: #16a34a;
+}
+
+/* Ícono estado error en rojo */
+.sn-preview__status-error {
+    color: #dc2626;
 }
 
 .sn-preview__td {
