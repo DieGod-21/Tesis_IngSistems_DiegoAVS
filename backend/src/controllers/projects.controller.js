@@ -1,0 +1,159 @@
+const pool = require('../db/pool');
+const { FASES_VALIDAS, ESTADOS } = require('../constants');
+
+const ESTADOS_VALIDOS = ESTADOS.proyecto;
+
+const PROJECT_RETURNING = `id, titulo, descripcion, fase_academica, estado,
+                            semester_id, es_grupal, created_by, created_at, updated_at`;
+
+const getAll = async (req, res, next) => {
+  try {
+    const { estado, fase_academica, semester_id } = req.query;
+
+    if (estado && !ESTADOS_VALIDOS.includes(estado)) {
+      return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
+    }
+    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
+      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    }
+
+    let query = `
+      SELECT p.id, p.titulo, p.descripcion, p.fase_academica, p.estado,
+             p.semester_id, p.es_grupal, p.created_at, sem.nombre AS semestre,
+             array_agg(DISTINCT s.nombre_completo) FILTER (WHERE s.id IS NOT NULL) AS estudiantes,
+             array_agg(DISTINCT u.nombre_completo) FILTER (WHERE u.id IS NOT NULL) AS asesores
+      FROM projects p
+      LEFT JOIN semesters sem       ON sem.id = p.semester_id
+      LEFT JOIN project_students ps ON ps.project_id = p.id
+      LEFT JOIN students s          ON s.id = ps.student_id
+      LEFT JOIN project_advisors pa ON pa.project_id = p.id AND pa.activo = TRUE
+      LEFT JOIN users u             ON u.id = pa.advisor_id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (estado)         { params.push(estado);         query += ` AND p.estado = $${params.length}`; }
+    if (fase_academica) { params.push(fase_academica); query += ` AND p.fase_academica = $${params.length}`; }
+    if (semester_id)    { params.push(semester_id);    query += ` AND p.semester_id = $${params.length}`; }
+    query += ' GROUP BY p.id, sem.nombre ORDER BY p.created_at DESC';
+
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getById = async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id, p.titulo, p.descripcion, p.fase_academica, p.estado,
+              p.semester_id, p.es_grupal, p.created_at, sem.nombre AS semestre,
+              array_agg(DISTINCT jsonb_build_object('id', s.id, 'nombre', s.nombre_completo, 'carnet', s.carnet_id, 'rol', ps.rol_en_proyecto))
+                FILTER (WHERE s.id IS NOT NULL) AS estudiantes,
+              array_agg(DISTINCT jsonb_build_object('id', u.id, 'nombre', u.nombre_completo, 'rol', pa.rol_asesor))
+                FILTER (WHERE u.id IS NOT NULL AND pa.activo = TRUE) AS asesores
+       FROM projects p
+       LEFT JOIN semesters sem       ON sem.id = p.semester_id
+       LEFT JOIN project_students ps ON ps.project_id = p.id
+       LEFT JOIN students s          ON s.id = ps.student_id
+       LEFT JOIN project_advisors pa ON pa.project_id = p.id
+       LEFT JOIN users u             ON u.id = pa.advisor_id
+       WHERE p.id = $1
+       GROUP BY p.id, sem.nombre`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Proyecto no encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getByStudent = async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id, p.titulo, p.descripcion, p.fase_academica, p.estado,
+              p.semester_id, p.es_grupal, p.created_at, sem.nombre AS semestre,
+              ps.rol_en_proyecto
+       FROM projects p
+       JOIN project_students ps    ON ps.project_id = p.id
+       LEFT JOIN semesters sem     ON sem.id = p.semester_id
+       WHERE ps.student_id = $1
+       ORDER BY p.created_at DESC`,
+      [req.params.student_id]
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const create = async (req, res, next) => {
+  try {
+    const {
+      titulo,
+      descripcion,
+      fase_academica,
+      estado = 'activo',
+      semester_id,
+      es_grupal = false,
+    } = req.body;
+
+    if (!titulo?.trim() || !fase_academica || !semester_id) {
+      return res.status(400).json({ error: 'titulo, fase_academica y semester_id son requeridos' });
+    }
+    if (!FASES_VALIDAS.includes(fase_academica)) {
+      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    }
+    if (!ESTADOS_VALIDOS.includes(estado)) {
+      return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
+    }
+
+    const created_by = req.user.user_id;
+
+    const { rows } = await pool.query(
+      `INSERT INTO projects
+         (id, titulo, descripcion, fase_academica, estado, semester_id, es_grupal, created_by, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+       RETURNING ${PROJECT_RETURNING}`,
+      [titulo.trim(), descripcion?.trim(), fase_academica, estado, semester_id, es_grupal, created_by]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const update = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { titulo, descripcion, fase_academica, estado, semester_id, es_grupal } = req.body;
+
+    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
+      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    }
+    if (estado && !ESTADOS_VALIDOS.includes(estado)) {
+      return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE projects SET
+         titulo         = COALESCE($1, titulo),
+         descripcion    = COALESCE($2, descripcion),
+         fase_academica = COALESCE($3, fase_academica),
+         estado         = COALESCE($4, estado),
+         semester_id    = COALESCE($5, semester_id),
+         es_grupal      = COALESCE($6, es_grupal),
+         updated_at     = NOW()
+       WHERE id = $7
+       RETURNING ${PROJECT_RETURNING}`,
+      [titulo?.trim(), descripcion?.trim(), fase_academica, estado, semester_id, es_grupal, id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Proyecto no encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getAll, getById, getByStudent, create, update };
