@@ -130,4 +130,122 @@ const remove = async (req, res, next) => {
   }
 };
 
-module.exports = { getAll, getById, create, update, remove };
+/**
+ * bulkCreate — POST /api/students/bulk
+ *
+ * Recibe un array de filas y las inserta una por una.
+ * Valida cada fila antes de insertarla.
+ * Retorna un resumen: { importados, rechazados, errores[] }
+ * donde cada error indica { fila, carnet_id, razon }.
+ *
+ * No hace rollback global: las filas válidas se insertan
+ * aunque haya filas inválidas (comportamiento esperado para carga masiva).
+ */
+const bulkCreate = async (req, res, next) => {
+  try {
+    const { filas } = req.body;
+
+    if (!filas || !Array.isArray(filas)) {
+      return res.status(400).json({ error: 'Se requiere un array "filas" en el body' });
+    }
+    if (filas.length === 0) {
+      return res.status(400).json({ error: 'El array "filas" no puede estar vacío' });
+    }
+
+    const created_by = req.user.user_id;
+
+    // Rastrear carnets ya vistos en esta misma carga para detectar duplicados internos
+    const carnetsCargaActual = new Set();
+
+    let importados = 0;
+    const errores = [];
+
+    for (let i = 0; i < filas.length; i++) {
+      const fila = filas[i];
+      const numFila = i + 2; // fila 1 = encabezado en Excel
+
+      const {
+        nombre_completo,
+        carnet_id,
+        correo_institucional,
+        fase_academica,
+        semester_id,
+        approved = false,
+      } = fila;
+
+      // ── Validaciones de la fila ──────────────────────────────────────
+      if (!nombre_completo?.trim()) {
+        errores.push({ fila: numFila, carnet_id: carnet_id ?? '', razon: 'nombre_completo es obligatorio' });
+        continue;
+      }
+      if (!carnet_id?.trim()) {
+        errores.push({ fila: numFila, carnet_id: '', razon: 'carnet_id es obligatorio' });
+        continue;
+      }
+      if (!correo_institucional?.trim()) {
+        errores.push({ fila: numFila, carnet_id: carnet_id.trim(), razon: 'correo_institucional es obligatorio' });
+        continue;
+      }
+      if (!EMAIL_REGEX.test(correo_institucional.trim())) {
+        errores.push({ fila: numFila, carnet_id: carnet_id.trim(), razon: 'Formato de correo institucional inválido' });
+        continue;
+      }
+      if (!fase_academica || !FASES_VALIDAS.includes(fase_academica)) {
+        errores.push({ fila: numFila, carnet_id: carnet_id.trim(), razon: `fase_academica debe ser: ${FASES_VALIDAS.join(', ')}` });
+        continue;
+      }
+      if (!semester_id) {
+        errores.push({ fila: numFila, carnet_id: carnet_id.trim(), razon: 'semester_id es obligatorio' });
+        continue;
+      }
+
+      // Duplicado dentro de la misma carga
+      const carnetNorm = carnet_id.trim().toLowerCase();
+      if (carnetsCargaActual.has(carnetNorm)) {
+        errores.push({ fila: numFila, carnet_id: carnet_id.trim(), razon: 'Carnet duplicado en esta carga' });
+        continue;
+      }
+      carnetsCargaActual.add(carnetNorm);
+
+      // ── Inserción en BD ──────────────────────────────────────────────
+      try {
+        await pool.query(
+          `INSERT INTO students
+             (id, nombre_completo, carnet_id, correo_institucional, fase_academica, semester_id, approved, created_by, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+          [
+            nombre_completo.trim(),
+            carnet_id.trim(),
+            correo_institucional.trim(),
+            fase_academica,
+            semester_id,
+            Boolean(approved),
+            created_by,
+          ]
+        );
+        importados++;
+      } catch (dbErr) {
+        // Constraint de unicidad u otro error de BD
+        const esUnico = dbErr.code === '23505'; // unique_violation en PostgreSQL
+        errores.push({
+          fila: numFila,
+          carnet_id: carnet_id.trim(),
+          razon: esUnico ? 'El carnet ya existe en la base de datos' : `Error de base de datos: ${dbErr.message}`,
+        });
+      }
+    }
+
+    const rechazados = errores.length;
+
+    res.json({
+      importados,
+      rechazados,
+      total: filas.length,
+      errores,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getAll, getById, create, bulkCreate, update, remove };

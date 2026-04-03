@@ -1423,3 +1423,184 @@
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   MEJORAS UI/UX — Paleta roja institucional
+   Aplica sobre las variables base sin romper la estructura existente.
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── Sidebar: tono rojo oscuro institucional ─────────────────────── */
+.dash-sidebar {
+    background: linear-gradient(180deg, #1a0a0d 0%, #2d0f17 40%, #1a0a0d 100%);
+    border-right: 1px solid rgba(200,16,46,0.25);
+}
+
+.dash-sidebar__brand {
+    border-bottom: 1px solid rgba(200,16,46,0.20);
+}
+
+.dash-sidebar__nav-item--active {
+    background: rgba(200, 16, 46, 0.18);
+    color: #ffffff;
+    border-left: 3px solid var(--umg-red);
+    padding-left: 9px;
+}
+
+.dash-sidebar__nav-item:hover {
+    background: rgba(200, 16, 46, 0.10);
+    color: #ffffff;
+}
+
+.dash-sidebar__footer {
+    border-top: 1px solid rgba(200,16,46,0.18);
+}
+
+/* ── Header: línea de acento rojo inferior ───────────────────────── */
+.dash-header {
+    border-bottom: 2px solid var(--umg-red);
+    background: #ffffff;
+}
+
+.dash-header__search:focus {
+    border-color: var(--umg-red);
+    box-shadow: 0 0 0 3px rgba(200,16,46,0.10);
+}
+
+/* Avatar del header con rojo */
+.dash-header__avatar {
+    background: var(--umg-red);
+    color: #ffffff;
+}
+
+/* ── Botones primarios: rojo institucional ───────────────────────── */
+.dash-btn-primary {
+    background: var(--umg-red);
+    box-shadow: 0 4px 14px rgba(200,16,46,0.30);
+}
+
+.dash-btn-primary:hover {
+    background: var(--umg-red-dark, #a00d24);
+    opacity: 1;
+    box-shadow: 0 6px 18px rgba(200,16,46,0.38);
+}
+
+/* ── KPI Cards: borde superior de color por variante ────────────── */
+.kpi-card {
+    border-top: 3px solid transparent;
+    transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease;
+}
+
+.kpi-card:hover {
+    border-top-color: var(--umg-red);
+}
+
+.kpi-card__icon-box--red {
+    background: var(--umg-red-light, #fde8ec);
+    color: var(--umg-red);
+}
+
+.kpi-card__icon-box--blue {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+/* Barra de progreso en rojo */
+.kpi-card__progress-bar {
+    background: linear-gradient(90deg, var(--umg-red) 0%, #e84060 100%);
+}
+
+/* ── Acciones de gestión rápida: hover rojo ──────────────────────── */
+.dash-qa-card {
+    border: 1px solid var(--dash-border);
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.dash-qa-card:hover {
+    border-color: var(--umg-red);
+    box-shadow: 0 4px 16px rgba(200,16,46,0.14);
+    transform: translateY(-2px);
+}
+
+.dash-qa-card__icon {
+    color: var(--umg-red);
+}
+
+/* ── Tabla acciones pendientes: hover de fila ────────────────────── */
+.dash-table__row:hover {
+    background: #fff5f6;
+}
+
+/* ── KPI strip de estudiantes: acento rojo en total ─────────────── */
+.dash-skpi--total {
+    border-left: 3px solid var(--umg-red);
+}
+
+.dash-skpi--approved {
+    border-left: 3px solid var(--color-success);
+}
+
+.dash-skpi--pending {
+    border-left: 3px solid var(--color-warning);
+}
+
+/* ── Badges de acción en tabla: variante danger más roja ─────────── */
+.dash-badge--danger {
+    background: var(--umg-red-light, #fde8ec);
+    color: var(--umg-red);
+    border: 1px solid rgba(200,16,46,0.20);
+}
+
+/* ── Link "Ver todos" con rojo ───────────────────────────────────── */
+.dash-recent-card__link {
+    color: var(--umg-red);
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+    transition: text-decoration 120ms ease;
+}
+
+.dash-recent-card__link:hover {
+    text-decoration: underline;
+}
+
+/* ── Filtro de actividad reciente: tab activo rojo ───────────────── */
+.dash-recent-filter__tab--active {
+    background: var(--umg-red);
+    color: #ffffff;
+    border-color: var(--umg-red);
+}
+
+/* ── Títulos de sección: línea izquierda roja ────────────────────── */
+.dash-section-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--dash-text-primary);
+    margin: 0 0 16px;
+    padding-left: 10px;
+    border-left: 3px solid var(--umg-red);
+}
+
+/* ── Error block: botón reintentar rojo ──────────────────────────── */
+.dash-error-block__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--umg-red);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 150ms ease;
+}
+
+.dash-error-block__btn:hover {
+    background: var(--umg-red-dark, #a00d24);
+}

@@ -60,6 +60,14 @@ export interface ImportResult {
     errors: Array<{ row: number; reason: string }>;
 }
 
+/** Respuesta del endpoint POST /api/students/bulk */
+interface BulkResponse {
+    importados: number;
+    rechazados: number;
+    total: number;
+    errores: Array<{ fila: number; carnet_id: string; razon: string }>;
+}
+
 /** Ítem de carga reciente (historial local) */
 export interface UploadItem {
     id: string;
@@ -131,62 +139,51 @@ function saveUploads(uploads: UploadItem[]): void {
 }
 
 /**
- * Importa filas desde Excel/CSV validando formato local.
- * Si se provee semesterId, los registros válidos se envían al backend.
- * Sin semesterId solo se valida localmente (útil como previsualización).
+ * Importa filas desde Excel/CSV usando POST /api/students/bulk.
+ * El backend valida cada fila y retorna el resumen con errores por fila.
+ * semesterId es obligatorio para la inserción; si no se provee se usa el
+ * valor de semestreLectivo de cada fila (fallback: string vacío → backend rechaza).
  */
 export async function importStudents(
     rows: ParsedRow[],
     semesterId?: string,
 ): Promise<ImportResult> {
-    const errors: ImportResult['errors'] = [];
-    let imported = 0;
-    let rejected = 0;
+    // Construir payload para el backend
+    const filas = rows.map((row) => ({
+        nombre_completo:      (row.nombreCompleto ?? '').trim(),
+        carnet_id:            (row.carnetId ?? '').trim(),
+        correo_institucional: (row.correoInstitucional ?? '').trim(),
+        fase_academica:       (row.faseAcademica ?? 'anteproyecto').trim(),
+        semester_id:          semesterId ?? (row.semestreLectivo ?? '').trim(),
+        approved:             false,
+    }));
 
-    for (const row of rows) {
-        if (!row.carnetId?.trim()) {
-            errors.push({ row: row.rowIndex, reason: 'Carnet vacío' });
-            rejected++;
-            continue;
-        }
-        if (row.correoInstitucional && !ALLOWED_EMAIL_DOMAINS.some((d) => row.correoInstitucional!.toLowerCase().endsWith(d))) {
-            errors.push({ row: row.rowIndex, reason: `Correo inválido: ${row.correoInstitucional}` });
-            rejected++;
-            continue;
-        }
-        if (!semesterId) {
-            // Sin semesterId: solo validación local, no se envía al backend
-            imported++;
-            continue;
-        }
-        try {
-            await createStudent({
-                nombreCompleto:      row.nombreCompleto ?? '',
-                carnetId:            row.carnetId ?? '',
-                correoInstitucional: row.correoInstitucional ?? '',
-                semesterId,
-                faseAcademica:       row.faseAcademica ?? 'anteproyecto',
-            });
-            imported++;
-        } catch {
-            errors.push({ row: row.rowIndex, reason: 'Error al registrar en el servidor' });
-            rejected++;
-        }
-    }
+    const resp = await apiFetch<BulkResponse>('/students/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ filas }),
+    });
 
+    // Normalizar respuesta del backend al formato ImportResult del frontend
+    const result: ImportResult = {
+        imported: resp.importados,
+        rejected: resp.rechazados,
+        errors:   resp.errores.map((e) => ({ row: e.fila, reason: e.razon })),
+    };
+
+    // Registrar en historial local
     const current = readUploads();
     saveUploads([
         {
             id: `ul-${Date.now()}`,
             filename: `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`,
-            status: (rejected === rows.length ? 'error' : 'success') as UploadItem['status'],
+            status: (resp.rechazados === rows.length ? 'error' : 'success') as UploadItem['status'],
             uploadedAt: 'Ahora',
             type: 'excel',
         },
         ...current,
     ]);
 
-    return { imported, rejected, errors };
+    return result;
 }
 
 /** Sube un PDF (historial local, sin endpoint de backend aún). */
