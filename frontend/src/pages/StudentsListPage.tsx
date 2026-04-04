@@ -6,8 +6,8 @@
  * vive en el hook useStudentsList. Este componente es 100% UI.
  */
 
-import React from 'react';
-import { useHistory } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import { Search, Plus, ChevronRight } from 'lucide-react';
 import AppShell from '../layout/AppShell';
 import ApprovalToggle from '../components/students/ApprovalToggle';
@@ -56,17 +56,24 @@ const TableSkeleton: React.FC = () => (
 
 const StudentsListPage: React.FC = () => {
     const history = useHistory();
+    const location = useLocation();
+    const initialQuery = new URLSearchParams(location.search).get('q') ?? '';
     const {
         loading,
         query,
         setQuery,
         statusFilter,
         setStatusFilter,
-        toggling,
         handleToggle,
         kpis,
         filtered,
-    } = useStudentsList();
+    } = useStudentsList(initialQuery);
+
+    // Sincroniza el estado del hook con cambios del URL (ej. desde TopHeader)
+    useEffect(() => {
+        const q = new URLSearchParams(location.search).get('q') ?? '';
+        setQuery(q);
+    }, [location.search, setQuery]);
 
     return (
         <AppShell>
@@ -190,28 +197,28 @@ const StudentsListPage: React.FC = () => {
                                         <td className="sl-table__td">
                                             <div className="sl-student-cell">
                                                 <div className="sl-avatar" aria-hidden="true">
-                                                    {initials(student.nombreCompleto)}
+                                                    {initials(student.nombreCompleto ?? '')}
                                                 </div>
                                                 <div>
                                                     <p className="sl-student-name">
-                                                        {student.nombreCompleto}
+                                                        {student.nombreCompleto ?? '—'}
                                                     </p>
                                                     <p className="sl-student-carnet">
-                                                        {student.carnetId}
+                                                        {student.carnetId ?? '—'}
                                                     </p>
                                                 </div>
                                             </div>
                                         </td>
                                         {/* Semestre */}
                                         <td className="sl-table__td">
-                                            {student.semestreLectivo}
+                                            {student.semestreLectivo ?? '—'}
                                         </td>
                                         {/* Fase */}
                                         <td className="sl-table__td">
                                             <span
-                                                className={`sl-phase-badge sl-phase-badge--${student.faseAcademica.toLowerCase()}`}
+                                                className={`sl-phase-badge sl-phase-badge--${(student.faseAcademica ?? '').toLowerCase()}`}
                                             >
-                                                {student.faseAcademica}
+                                                {student.faseAcademica ?? '—'}
                                             </span>
                                         </td>
                                         {/* Badge estado */}
@@ -224,7 +231,6 @@ const StudentsListPage: React.FC = () => {
                                                 <ApprovalToggle
                                                     checked={student.approved}
                                                     onChange={(next) => handleToggle(student.id, next)}
-                                                    loading={toggling[student.id]}
                                                     label={student.approved ? 'Aprobado' : 'Pendiente'}
                                                 />
                                             </div>

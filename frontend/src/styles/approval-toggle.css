@@ -132,54 +132,11 @@
     color: #16a34a;
 }
 
-/* ─── Estado de carga (optimistic: toggle visible, spinner encima) ── */
-
-/*
- * .at-root--loading: el toggle ya cambió optimistamente.
- * El spinner indica que la confirmación del backend está pendiente.
- * No bloquea la interacción (el usuario ya actuó).
- */
-.at-root--loading .at-track::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: rgba(255, 255, 255, 0.18);
-    z-index: 1;
-}
-
-/* Spinner pequeño centrado sobre el thumb */
-.at-spinner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    border-top-color: #ffffff;
-    border-radius: 50%;
-    animation: spin 0.65s linear infinite;
-    z-index: 2;
-    pointer-events: none;
-}
-
-/* Cuando está OFF y cargando, el spinner es oscuro */
-.at-root[data-checked="false"].at-root--loading .at-spinner {
-    border-color: rgba(100, 116, 139, 0.35);
-    border-top-color: #64748b;
-}
-
 /* ─── Accesibilidad — prefers-reduced-motion ────────────────────── */
 @media (prefers-reduced-motion: reduce) {
 
     .at-track,
     .at-thumb {
         transition: none;
-    }
-
-    .at-spinner {
-        animation: none;
-        opacity: 0.6;
     }
 }

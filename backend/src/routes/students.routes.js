@@ -4,6 +4,9 @@ const validateUUID = require('../middleware/validateUUID');
 const authenticate = require('../middleware/authenticate');
 const authorize = require('../middleware/authorize');
 
+// Plantilla Excel descargable (pública con auth)
+router.get('/template', authenticate, ctrl.downloadTemplate);
+
 // Lectura: admin y asesor | Escritura: admin y asesor
 router.get('/',       authenticate, authorize('admin', 'asesor'), ctrl.getAll);
 router.post('/bulk',  authenticate, authorize('admin', 'asesor'), ctrl.bulkCreate);

@@ -104,38 +104,16 @@ export async function createStudent(payload: StudentPayload): Promise<BackendStu
     });
 }
 
-// ─── Uploads (historial local — no tiene endpoint en backend) ─────────
+// ─── Tipos de respuesta del backend para historial ────────────────────
 
-const UPLOADS_KEY = 'umg_recent_uploads';
-
-const SEED_UPLOADS: UploadItem[] = [
-    {
-        id: 'ul-1',
-        filename: 'estudiantes_pg1_v2.xlsx',
-        status: 'success',
-        uploadedAt: 'Hace 2 horas',
-        type: 'excel',
-    },
-    {
-        id: 'ul-2',
-        filename: 'listado_final_sedes.pdf',
-        status: 'success',
-        uploadedAt: 'Ayer',
-        type: 'pdf',
-    },
-];
-
-function readUploads(): UploadItem[] {
-    try {
-        const raw = localStorage.getItem(UPLOADS_KEY);
-        if (raw) return JSON.parse(raw) as UploadItem[];
-    } catch { /* JSON corrupto */ }
-    localStorage.setItem(UPLOADS_KEY, JSON.stringify(SEED_UPLOADS));
-    return SEED_UPLOADS;
-}
-
-function saveUploads(uploads: UploadItem[]): void {
-    localStorage.setItem(UPLOADS_KEY, JSON.stringify(uploads.slice(0, 10)));
+interface BackendUpload {
+    id: string;
+    filename: string;
+    type: 'excel' | 'pdf';
+    status: 'success' | 'error';
+    imported: number;
+    rejected: number;
+    created_at: string;
 }
 
 /**
@@ -170,38 +148,42 @@ export async function importStudents(
         errors:   resp.errores.map((e) => ({ row: e.fila, reason: e.razon })),
     };
 
-    // Registrar en historial local
-    const current = readUploads();
-    saveUploads([
-        {
-            id: `ul-${Date.now()}`,
-            filename: `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`,
-            status: (resp.rechazados === rows.length ? 'error' : 'success') as UploadItem['status'],
-            uploadedAt: 'Ahora',
-            type: 'excel',
-        },
-        ...current,
-    ]);
-
     return result;
 }
 
-/** Sube un PDF (historial local, sin endpoint de backend aún). */
-export async function uploadPdf(file: File): Promise<void> {
-    const current = readUploads();
-    saveUploads([
-        {
-            id: `ul-${Date.now()}`,
-            filename: file.name,
-            status: 'success',
-            uploadedAt: 'Ahora',
-            type: 'pdf',
-        },
-        ...current,
-    ]);
+/** Sube un PDF (sin endpoint de backend — no genera historial en BD). */
+export async function uploadPdf(_file: File): Promise<void> {
+    // PDF processing is handled server-side when backend endpoint is added
 }
 
-/** Obtiene el historial de cargas recientes. */
+/** Descarga la plantilla Excel de carga masiva desde el backend. */
+export async function downloadTemplate(): Promise<void> {
+    const token = localStorage.getItem('auth_token');
+    const base  = import.meta.env.VITE_API_URL ?? '/api';
+    const res   = await fetch(`${base}/students/template`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error('No se pudo descargar la plantilla');
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'plantilla_estudiantes.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/** Obtiene el historial de cargas recientes desde el backend. */
 export async function getRecentUploads(): Promise<UploadItem[]> {
-    return readUploads();
+    const rows = await apiFetch<BackendUpload[]>('/uploads');
+    return rows.map((r) => ({
+        id: r.id,
+        filename: r.filename,
+        type: r.type,
+        status: r.status,
+        uploadedAt: new Date(r.created_at).toLocaleString('es-GT', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        }),
+    }));
 }

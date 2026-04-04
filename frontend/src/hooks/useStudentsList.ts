@@ -24,14 +24,11 @@ import { useToast } from '../context/ToastContext';
 
 export type StatusFilter = 'all' | 'approved' | 'pending';
 
-export function useStudentsList() {
+export function useStudentsList(initialQuery = '') {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = useState(initialQuery);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-    // Tracks in-progress toggles to disable the control during the async operation
-    const [toggling, setToggling] = useState<Record<string, boolean>>({});
-    // Evita setState en componente desmontado (Promise puede resolver tarde)
     const isMountedRef = useRef(true);
     const { toast } = useToast();
 
@@ -41,10 +38,13 @@ export function useStudentsList() {
         let canceled = false;
 
         const load = async () => {
-            const data = await getStudents();
-            if (!canceled) {
-                setStudents(data);
-                setLoading(false);
+            try {
+                const data = await getStudents();
+                if (!canceled) setStudents(data);
+            } catch {
+                // API error: la tabla queda vacía, no hay crash
+            } finally {
+                if (!canceled) setLoading(false);
             }
         };
 
@@ -64,27 +64,18 @@ export function useStudentsList() {
                 s.id === id ? { ...s, approved: next, updatedAt: new Date().toISOString() } : s,
             ),
         );
-        setToggling((t) => ({ ...t, [id]: true }));
 
         // 2. Persistir via API (async) con UI optimista.
         updateStudentStatus(id, next)
-            .then((updated) => {
-                // Sincronizar con la lista fresca del servidor
+            .then(() => {
                 if (isMountedRef.current) {
-                    setStudents(updated);
                     toast.success(next ? 'Estudiante aprobado correctamente' : 'Aprobación revertida');
                 }
             })
             .catch(() => {
-                // Rollback solo si el componente sigue montado
                 if (isMountedRef.current) {
                     setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
                     toast.error('No se pudo actualizar el estado. Intenta de nuevo.');
-                }
-            })
-            .finally(() => {
-                if (isMountedRef.current) {
-                    setToggling((t) => ({ ...t, [id]: false }));
                 }
             });
     }, []);
@@ -96,13 +87,15 @@ export function useStudentsList() {
     // ── Filtrado ─────────────────────────────────────────────────────
 
     const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
+        const normalize = (str: string) =>
+            str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const q = normalize(query.trim());
         return students.filter((s) => {
             const matchText =
                 !q ||
-                s.nombreCompleto.toLowerCase().includes(q) ||
-                s.carnetId.toLowerCase().includes(q) ||
-                s.correoInstitucional.toLowerCase().includes(q);
+                normalize(s.nombreCompleto).includes(q) ||
+                normalize(s.carnetId).includes(q) ||
+                normalize(s.correoInstitucional).includes(q);
             const matchStatus =
                 statusFilter === 'all' ||
                 (statusFilter === 'approved' && s.approved) ||
@@ -118,7 +111,6 @@ export function useStudentsList() {
         setQuery,
         statusFilter,
         setStatusFilter,
-        toggling,
         handleToggle,
         kpis,
         filtered,

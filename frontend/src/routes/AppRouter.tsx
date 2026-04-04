@@ -18,6 +18,7 @@ import LoginPage from '../pages/LoginPage';
 import DashboardPage from '../pages/DashboardPage';
 import StudentNewPage from '../pages/StudentNewPage';
 import StudentsListPage from '../pages/StudentsListPage';
+import CalendarPage from '../pages/CalendarPage';
 
 // ─── Tipos ───────────────────────────────────────────────────────────
 
@@ -133,6 +134,10 @@ const AppRouter: React.FC = () => (
 
             <ProtectedRoute path="/students/new" exact>
                 <StudentNewPage />
+            </ProtectedRoute>
+
+            <ProtectedRoute path="/calendar" exact>
+                <CalendarPage />
             </ProtectedRoute>
 
             <Route exact path="/">

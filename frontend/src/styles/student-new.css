@@ -95,6 +95,15 @@
     border-bottom: 1px solid var(--dash-border);
 }
 
+.sn-card__header-action {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
 .sn-card__header-icon {
     color: var(--umg-navy);
     flex-shrink: 0;
@@ -823,43 +832,10 @@
     }
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   MEJORAS UI/UX — Paleta roja institucional
-═══════════════════════════════════════════════════════════════════ */
-
-/* Botón primario: rojo institucional */
-.sn-btn-primary {
-    background: var(--umg-red, #c8102e);
-    box-shadow: 0 4px 14px rgba(200,16,46,0.28);
-    transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
-}
-
-.sn-btn-primary:hover:not(:disabled) {
-    background: #a00d24;
-    box-shadow: 0 6px 18px rgba(200,16,46,0.35);
-    transform: translateY(-1px);
-    opacity: 1;
-}
-
-.sn-btn-primary:active {
-    transform: scale(0.97);
-}
-
-/* Card header: línea izquierda roja */
-.sn-card__header {
-    border-bottom: 1px solid var(--dash-border, #e2e8f0);
-    padding-bottom: 12px;
-    margin-bottom: 20px;
-}
-
-.sn-card__header-icon {
-    color: var(--umg-red, #c8102e);
-}
-
-/* Inputs: focus en rojo */
+/* Inputs: focus en azul */
 .sn-field:focus-within {
-    border-color: var(--umg-red, #c8102e);
-    box-shadow: 0 0 0 3px rgba(200,16,46,0.10);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
 }
 
 /* Dropzone: borde rojo al arrastrar */

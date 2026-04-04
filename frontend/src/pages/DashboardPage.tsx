@@ -25,7 +25,7 @@ import AppShell from '../layout/AppShell';
 import AppFooter from '../components/AppFooter';
 import KpiCard from '../components/KpiCard';
 import PendingActionsTable from '../components/PendingActionsTable';
-import UpcomingDeadlines from '../components/UpcomingDeadlines';
+import MiniCalendar from '../components/MiniCalendar';
 import FacultyResources from '../components/FacultyResources';
 import StatusBadge from '../components/students/StatusBadge';
 
@@ -288,25 +288,10 @@ const DashboardPage: React.FC = () => {
                             </ul>
                         </div>
 
-                        {/* Próximas Entregas y Recursos de Facultad */}
+                        {/* Mini Calendario y Recursos de Facultad */}
+                        <MiniCalendar />
                         {summary.status === 'success' && (
-                            <>
-                                <UpcomingDeadlines deadlines={summary.data.deadlines} />
-                                <FacultyResources resources={summary.data.resources} />
-                            </>
-                        )}
-                        {(summary.status === 'loading' || summary.status === 'idle') && (
-                            <div className="dash-deadlines" aria-busy="true" aria-label="Cargando próximas entregas…">
-                                {[0, 1, 2].map((i) => (
-                                    <div key={i} className="dash-skeleton-row">
-                                        <div className="skeleton skeleton--box" />
-                                        <div className="dash-skeleton-row__lines">
-                                            <div className="skeleton skeleton--line skeleton--medium" />
-                                            <div className="skeleton skeleton--line skeleton--short" />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <FacultyResources resources={summary.data.resources} />
                         )}
                     </aside>
                 </div>

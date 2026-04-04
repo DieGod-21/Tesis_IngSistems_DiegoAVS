@@ -66,11 +66,11 @@
     /* ── Tipografía ── */
     --font-main: 'Inter', system-ui, -apple-system, sans-serif;
 
-    /* ── Sidebar gradiente animado ── */
-    --sidebar-grad-start:  #1a2340;
-    --sidebar-grad-mid1:   #0f3460;
-    --sidebar-grad-mid2:   #7b1a35;
-    --sidebar-grad-end:    #c8102e;
+    /* ── Sidebar gradiente animado (azul profesional) ── */
+    --sidebar-grad-start:  #0f172a;
+    --sidebar-grad-mid1:   #1e3a8a;
+    --sidebar-grad-mid2:   #1d4ed8;
+    --sidebar-grad-end:    #2563eb;
 
     /* ── Toast ── */
     --toast-success-bg:  #f0fdf4;

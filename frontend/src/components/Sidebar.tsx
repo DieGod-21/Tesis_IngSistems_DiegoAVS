@@ -35,22 +35,15 @@ interface NavItem {
     to: string;
     icon: React.ReactNode;
     exact?: boolean;
+    disabled?: boolean;
 }
 
-// ─── Datos de navegación ─────────────────────────────────────────────
-// Terminología institucional: "Dashboard" → "Inicio"
-
 const NAV_ITEMS: NavItem[] = [
-    { label: 'Inicio', to: '/dashboard', icon: <Home size={20} />, exact: true },
-    { label: 'Nuevo Registro', to: '/students/new', icon: <UserPlus size={20} />, exact: true },
-    { label: 'Estudiantes', to: '/students', icon: <Users size={20} /> },
-    { label: 'Proyectos', to: '/projects', icon: <Briefcase size={20} /> },
-    {
-        label: 'Calendario Académico',
-        to: '/calendar',
-        icon: <CalendarDays size={20} />,
-        // TODO: Integrar API de eventos académicos del semestre
-    },
+    { label: 'Inicio',               to: '/dashboard',   icon: <Home size={20} />,        exact: true },
+    { label: 'Nuevo Registro',       to: '/students/new',icon: <UserPlus size={20} />,     exact: true },
+    { label: 'Estudiantes',          to: '/students',    icon: <Users size={20} />,        exact: true },
+    { label: 'Proyectos',            to: '/projects',    icon: <Briefcase size={20} />,    disabled: true },
+    { label: 'Calendario Académico', to: '/calendar',    icon: <CalendarDays size={20} />, exact: true },
 ];
 
 // ─── Componente ──────────────────────────────────────────────────────
@@ -92,32 +85,45 @@ const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
 
                 {/* Navegación principal */}
                 <nav className="dash-sidebar__nav" aria-label="Navegación principal">
-                    {NAV_ITEMS.map((item) => (
-                        <NavLink
-                            key={item.label}
-                            to={item.to}
-                            exact={item.exact}
-                            className="dash-sidebar__nav-item"
-                            activeClassName="dash-sidebar__nav-item--active"
-                            onClick={onClose}   /* cierra sidebar móvil al navegar */
-                        >
-                            {item.icon}
-                            <span>{item.label}</span>
-                        </NavLink>
-                    ))}
+                    {NAV_ITEMS.map((item) =>
+                        item.disabled ? (
+                            <span
+                                key={item.label}
+                                className="dash-sidebar__nav-item dash-sidebar__nav-item--disabled"
+                                aria-disabled="true"
+                                title="Módulo próximamente disponible"
+                            >
+                                {item.icon}
+                                <span>{item.label}</span>
+                                <span className="dash-sidebar__coming-soon">Pronto</span>
+                            </span>
+                        ) : (
+                            <NavLink
+                                key={item.label}
+                                to={item.to}
+                                exact={item.exact}
+                                className="dash-sidebar__nav-item"
+                                activeClassName="dash-sidebar__nav-item--active"
+                                onClick={onClose}
+                            >
+                                {item.icon}
+                                <span>{item.label}</span>
+                            </NavLink>
+                        )
+                    )}
                 </nav>
 
                 {/* Acciones inferiores */}
                 <div className="dash-sidebar__footer">
-                    <NavLink
-                        to="/settings"
-                        exact
-                        className="dash-sidebar__nav-item"
-                        activeClassName="dash-sidebar__nav-item--active"
+                    <span
+                        className="dash-sidebar__nav-item dash-sidebar__nav-item--disabled"
+                        aria-disabled="true"
+                        title="Módulo próximamente disponible"
                     >
                         <Settings size={20} />
                         <span>Configuración</span>
-                    </NavLink>
+                        <span className="dash-sidebar__coming-soon">Pronto</span>
+                    </span>
 
                     <button
                         className="dash-sidebar__nav-item dash-sidebar__logout"

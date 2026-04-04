@@ -17,28 +17,53 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Search, Bell, Menu } from 'lucide-react';
+import { useHistory, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 interface TopHeaderProps {
     onMenuToggle?: () => void;
-    onSearch?: (query: string) => void;
 }
 
-const TopHeader: React.FC<TopHeaderProps> = ({ onMenuToggle, onSearch }) => {
+const TopHeader: React.FC<TopHeaderProps> = ({ onMenuToggle }) => {
     const { user } = useAuth();
+    const history = useHistory();
+    const location = useLocation();
     const [inputValue, setInputValue] = useState('');
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const inputRef    = useRef<HTMLInputElement>(null);
+
+    // Pre-populate from URL when landing on /students and restore focus
+    useEffect(() => {
+        if (location.pathname === '/students') {
+            const params = new URLSearchParams(location.search);
+            const q = params.get('q') ?? '';
+            setInputValue(q);
+            if (q) setTimeout(() => inputRef.current?.focus(), 0);
+        } else {
+            setInputValue('');
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [location.pathname]);
 
     useEffect(() => {
-        if (!onSearch) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-            onSearch(inputValue);
-        }, 300);
+            const q = inputValue.trim();
+            if (location.pathname === '/students') {
+                const current = new URLSearchParams(window.location.search).get('q') ?? '';
+                if (q === current) return;
+                const params = new URLSearchParams(window.location.search);
+                if (q) { params.set('q', q); } else { params.delete('q'); }
+                history.replace(`/students?${params.toString()}`);
+            } else if (q.length >= 2) {
+                history.push(`/students?q=${encodeURIComponent(q)}`);
+            }
+        }, 500);
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
-    }, [inputValue, onSearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inputValue]);
 
     return (
         <header className="dash-header">
@@ -55,6 +80,7 @@ const TopHeader: React.FC<TopHeaderProps> = ({ onMenuToggle, onSearch }) => {
             <div className="dash-header__search-wrapper">
                 <Search size={16} className="dash-header__search-icon" aria-hidden="true" />
                 <input
+                    ref={inputRef}
                     type="text"
                     className="dash-header__search"
                     placeholder="Buscar por Carné o Nombre de Estudiante…"

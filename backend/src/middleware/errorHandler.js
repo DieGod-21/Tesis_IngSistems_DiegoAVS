@@ -1,5 +1,6 @@
 const PG_ERRORS = {
   '22P02': { status: 400, message: 'ID con formato inválido' },
+  '22001': { status: 400, message: 'Un campo excede el largo máximo permitido' },
   '23505': { status: 409, message: 'Ya existe un registro con ese valor único' },
   '23503': { status: 409, message: 'El recurso relacionado no existe' },
   '23514': { status: 400, message: 'Valor fuera del rango permitido' },

@@ -25,14 +25,14 @@ import React, { useState } from 'react';
 import { IonPage, IonContent } from '@ionic/react';
 import Sidebar from '../components/Sidebar';
 import TopHeader from '../components/TopHeader';
+import '../styles/dashboard.css';
 import '../styles/transitions.css';
 
 interface AppShellProps {
     children: React.ReactNode;
-    onSearch?: (query: string) => void;
 }
 
-const AppShell: React.FC<AppShellProps> = ({ children, onSearch }) => {
+const AppShell: React.FC<AppShellProps> = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     return (
@@ -63,7 +63,6 @@ const AppShell: React.FC<AppShellProps> = ({ children, onSearch }) => {
                          */}
                         <TopHeader
                             onMenuToggle={() => setSidebarOpen((v) => !v)}
-                            onSearch={onSearch}
                         />
                         {children}
                     </main>

@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { useHistory } from 'react-router-dom';
 import type { Deadline } from '../services/dashboardService';
 
 interface UpcomingDeadlinesProps {
@@ -13,6 +14,7 @@ interface UpcomingDeadlinesProps {
 }
 
 const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ deadlines }) => {
+    const history = useHistory();
     return (
         <section className="dash-deadlines">
             <h4 className="dash-deadlines__title">Próximas Entregas</h4>
@@ -35,7 +37,9 @@ const UpcomingDeadlines: React.FC<UpcomingDeadlinesProps> = ({ deadlines }) => {
                 ))}
             </ul>
 
-            <button className="dash-deadlines__btn">Gestionar Calendario</button>
+            <button className="dash-deadlines__btn" onClick={() => history.push('/calendar')}>
+                Gestionar Calendario
+            </button>
         </section>
     );
 };

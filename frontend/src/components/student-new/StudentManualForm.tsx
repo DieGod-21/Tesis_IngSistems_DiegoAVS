@@ -45,9 +45,11 @@ function validate(values: FormFields) {
 
     const nombre = runValidators(values.nombreCompleto, validators.required('El nombre completo'));
     if (nombre) errors.nombreCompleto = nombre;
+    else if (values.nombreCompleto.trim().length > 150) errors.nombreCompleto = 'El nombre no puede exceder 150 caracteres';
 
     const carnet = runValidators(values.carnetId, validators.required('El carnet ID'));
     if (carnet) errors.carnetId = carnet;
+    else if (values.carnetId.trim().length > 50) errors.carnetId = 'El carnet no puede exceder 50 caracteres';
 
     const correo = runValidators(
         values.correoInstitucional,
@@ -129,6 +131,7 @@ const StudentManualForm: React.FC = () => {
                                 type="text"
                                 className="sn-field__input"
                                 placeholder="Ej. Juan Pérez López"
+                                maxLength={150}
                                 value={values.nombreCompleto}
                                 onChange={(e) => handleChange('nombreCompleto', e.target.value)}
                                 onBlur={() => handleBlur('nombreCompleto')}
@@ -154,6 +157,7 @@ const StudentManualForm: React.FC = () => {
                                     type="text"
                                     className="sn-field__input"
                                     placeholder="1234-20-XXXX"
+                                    maxLength={50}
                                     value={values.carnetId}
                                     onChange={(e) => handleChange('carnetId', e.target.value)}
                                     onBlur={() => handleBlur('carnetId')}
@@ -177,6 +181,7 @@ const StudentManualForm: React.FC = () => {
                                     type="email"
                                     className="sn-field__input"
                                     placeholder="usuario@miumg.edu.gt"
+                                    maxLength={100}
                                     value={values.correoInstitucional}
                                     onChange={(e) => handleChange('correoInstitucional', e.target.value)}
                                     onBlur={() => handleBlur('correoInstitucional')}

@@ -10,8 +10,8 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X } from 'lucide-react';
-import { importStudents, uploadPdf } from '../../services/studentsService';
+import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X, Download } from 'lucide-react';
+import { importStudents, uploadPdf, downloadTemplate } from '../../services/studentsService';
 import type { ImportResult, ParsedRow } from '../../services/studentsService';
 import { isInstitutionalEmail } from '../../utils/validators';
 
@@ -176,11 +176,28 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
 
     const isDragging = state.status === 'dragging';
 
+    const handleDownloadTemplate = async () => {
+        try {
+            await downloadTemplate();
+        } catch {
+            // silencioso — el navegador muestra el error de red si aplica
+        }
+    };
+
     return (
         <div className="sn-card sn-card--bulk">
             <div className="sn-card__header">
                 <CloudUpload size={20} className="sn-card__header-icon" />
                 <h3 className="sn-card__title">Carga Masiva</h3>
+                <button
+                    type="button"
+                    className="sn-btn-ghost sn-card__header-action"
+                    onClick={handleDownloadTemplate}
+                    title="Descargar plantilla Excel"
+                >
+                    <Download size={14} />
+                    Plantilla
+                </button>
             </div>
 
             <div className="sn-bulk-body">

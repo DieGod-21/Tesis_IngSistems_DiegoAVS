@@ -29,15 +29,13 @@ export async function getRecentStudents(n = 5): Promise<Student[]> {
 
 /**
  * Actualiza el campo `approved` de un estudiante vía PUT /api/students/:id.
- * Retorna el estudiante actualizado para que la UI pueda sincronizar.
+ * La UI ya aplica el cambio optimistamente — no se re-fetcha la lista completa.
  */
-export async function updateStudentStatus(id: string, approved: boolean): Promise<Student[]> {
+export async function updateStudentStatus(id: string, approved: boolean): Promise<void> {
     await apiFetch<BackendStudent>(`/students/${id}`, {
         method: 'PUT',
         body: JSON.stringify({ approved }),
     });
-    // Re-fetch para obtener lista actualizada (fuente de verdad: servidor)
-    return getStudents();
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────
