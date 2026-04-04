@@ -8,11 +8,13 @@
  * onUploaded() notifica al padre para refrescar RecentUploads.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X, Download } from 'lucide-react';
 import { importStudents, uploadPdf, downloadTemplate } from '../../services/studentsService';
 import type { ImportResult, ParsedRow } from '../../services/studentsService';
+import { getAcademicPhases } from '../../services/academicPhasesService';
+import type { AcademicPhase } from '../../services/academicPhasesService';
 import { isInstitutionalEmail } from '../../utils/validators';
 
 const ACCEPTED_TYPES = '.xlsx,.xls,.csv,.pdf';
@@ -52,8 +54,7 @@ function isPdf(file: File): boolean {
 }
 
 function isExcel(file: File): boolean {
-    return EXCEL_TYPES.includes(file.type) ||
-        /\.(xlsx?|csv)$/i.test(file.name);
+    return EXCEL_TYPES.includes(file.type) || /\.(xlsx?|csv)$/i.test(file.name);
 }
 
 async function parseExcel(file: File): Promise<ParsedRow[]> {
@@ -64,16 +65,13 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
                 const data = e.target?.result;
                 const wb = XLSX.read(data, { type: 'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
-                const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
-                    defval: '',
-                });
+                const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
                 const rows: ParsedRow[] = json.slice(0, MAX_PREVIEW_ROWS).map((row, i) => ({
-                    rowIndex: i + 2, // fila 1 = header
-                    nombreCompleto: String(row['nombreCompleto'] ?? row['Nombre'] ?? row['nombre_completo'] ?? ''),
-                    carnetId: String(row['carnetId'] ?? row['Carnet'] ?? row['carnet_id'] ?? ''),
-                    correoInstitucional: String(row['correoInstitucional'] ?? row['Correo'] ?? row['correo'] ?? ''),
-                    semestreLectivo: String(row['semestreLectivo'] ?? row['Semestre'] ?? ''),
-                    faseAcademica: String(row['faseAcademica'] ?? row['Fase'] ?? ''),
+                    rowIndex: i + 2,
+                    nombreCompleto:      String(row['nombreCompleto']      ?? row['Nombre']  ?? row['nombre_completo'] ?? ''),
+                    carnetId:            String(row['carnetId']            ?? row['Carnet']  ?? row['carnet_id']       ?? ''),
+                    correoInstitucional: String(row['correoInstitucional'] ?? row['Correo']  ?? row['correo']          ?? ''),
+                    semestreLectivo:     String(row['semestreLectivo']     ?? row['Semestre'] ?? ''),
                     ...row,
                 }));
                 resolve(rows);
@@ -89,21 +87,24 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
 // ─── Componente ─────────────────────────────────────────────────────
 
 const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
-    const [state, setState] = useState<UploadState>({ status: 'idle' });
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    // Almacena el archivo real para usarlo en el upload (evita perder la referencia)
-    const selectedFileRef = useRef<File | null>(null);
+    const [state, setState]           = useState<UploadState>({ status: 'idle' });
+    const [phases, setPhases]         = useState<AcademicPhase[]>([]);
+    const [selectedPhaseId, setSelectedPhaseId] = useState<number | ''>('');
+    const fileInputRef                = useRef<HTMLInputElement>(null);
+    const selectedFileRef             = useRef<File | null>(null);
+
+    useEffect(() => {
+        getAcademicPhases()
+            .then(setPhases)
+            .catch(() => {});
+    }, []);
 
     const handleFile = useCallback(async (file: File) => {
         selectedFileRef.current = file;
         setState({ status: 'parsing' });
         try {
             if (isPdf(file)) {
-                setState({
-                    status: 'pdf',
-                    filename: file.name,
-                    sizeKb: formatSize(file.size),
-                });
+                setState({ status: 'pdf', filename: file.name, sizeKb: formatSize(file.size) });
             } else if (isExcel(file)) {
                 const rows = await parseExcel(file);
                 setState({ status: 'preview', rows, filename: file.name });
@@ -139,15 +140,18 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) handleFile(file);
-        // reset input para permitir re-selección del mismo archivo
         e.target.value = '';
     };
 
     const handleImport = async () => {
         if (state.status === 'preview') {
+            if (!selectedPhaseId) {
+                setState({ status: 'error', message: 'Selecciona una fase académica antes de importar.' });
+                return;
+            }
             setState({ status: 'uploading' });
             try {
-                const result = await importStudents(state.rows);
+                const result = await importStudents(state.rows, undefined, Number(selectedPhaseId));
                 setState({ status: 'success', result });
                 onUploaded?.();
             } catch {
@@ -172,17 +176,11 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
         setState({ status: 'idle' });
     };
 
-    // ── Render por estado ───────────────────────────────────────────
+    const handleDownloadTemplate = async () => {
+        try { await downloadTemplate(); } catch { /* silencioso */ }
+    };
 
     const isDragging = state.status === 'dragging';
-
-    const handleDownloadTemplate = async () => {
-        try {
-            await downloadTemplate();
-        } catch {
-            // silencioso — el navegador muestra el error de red si aplica
-        }
-    };
 
     return (
         <div className="sn-card sn-card--bulk">
@@ -201,7 +199,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
             </div>
 
             <div className="sn-bulk-body">
-                {/* ── Zona de arrastre (idle / dragging / parsing) ─────── */}
+                {/* ── Zona de arrastre ─────────────────────────────────── */}
                 {(state.status === 'idle' || state.status === 'dragging' || state.status === 'parsing') && (
                     <div
                         className={`sn-dropzone${isDragging ? ' sn-dropzone--over' : ''}`}
@@ -230,7 +228,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                     </div>
                 )}
 
-                {/* ── Preview Excel ───────────────────────────────────── */}
+                {/* ── Preview Excel ────────────────────────────────────── */}
                 {state.status === 'preview' && (
                     <div className="sn-preview">
                         <div className="sn-preview__header">
@@ -243,6 +241,27 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         <p className="sn-preview__meta">
                             {state.rows.length} fila{state.rows.length !== 1 ? 's' : ''} (máx. {MAX_PREVIEW_ROWS} mostradas)
                         </p>
+
+                        {/* Selector de fase — requerido para importar */}
+                        <div className="sn-preview__phase-select">
+                            <label htmlFor="bulk-phase" className="sn-form__label">
+                                Fase Académica <span className="sn-form__required">*</span>
+                            </label>
+                            <select
+                                id="bulk-phase"
+                                className="sn-field__input sn-field__select"
+                                value={selectedPhaseId}
+                                onChange={(e) => setSelectedPhaseId(e.target.value === '' ? '' : Number(e.target.value))}
+                            >
+                                <option value="">Seleccionar fase para todos los registros</option>
+                                {phases.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.description ?? p.name} ({p.name})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
                         <div className="sn-preview__table-wrap">
                             <table className="sn-preview__table">
                                 <thead>
@@ -258,8 +277,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                     {state.rows.map((row) => {
                                         const hasError =
                                             !row.carnetId?.trim() ||
-                                            (!!row.correoInstitucional &&
-                                                !isInstitutionalEmail(row.correoInstitucional));
+                                            (!!row.correoInstitucional && !isInstitutionalEmail(row.correoInstitucional));
                                         return (
                                             <tr
                                                 key={row.rowIndex}
@@ -270,11 +288,9 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                                 <td className="sn-preview__td">{row.carnetId || <span className="sn-preview__empty">vacío</span>}</td>
                                                 <td className="sn-preview__td sn-preview__td--email">{row.correoInstitucional || '—'}</td>
                                                 <td className="sn-preview__td">
-                                                    {hasError ? (
-                                                        <AlertCircle size={14} className="sn-preview__status-error" />
-                                                    ) : (
-                                                        <CheckCircle2 size={14} className="sn-preview__status-ok" />
-                                                    )}
+                                                    {hasError
+                                                        ? <AlertCircle size={14} className="sn-preview__status-error" />
+                                                        : <CheckCircle2 size={14} className="sn-preview__status-ok" />}
                                                 </td>
                                             </tr>
                                         );
@@ -283,7 +299,12 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                             </table>
                         </div>
                         <div className="sn-preview__actions">
-                            <button type="button" className="sn-btn-primary" onClick={handleImport}>
+                            <button
+                                type="button"
+                                className="sn-btn-primary"
+                                onClick={handleImport}
+                                disabled={!selectedPhaseId}
+                            >
                                 Importar {state.rows.length} Registros
                             </button>
                             <button type="button" className="sn-btn-ghost" onClick={handleReset}>
@@ -299,16 +320,10 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         <FileText size={32} className="sn-pdf-info__icon" />
                         <p className="sn-pdf-info__name">{state.filename}</p>
                         <p className="sn-pdf-info__size">{state.sizeKb}</p>
-                        <p className="sn-pdf-info__note">
-                            El contenido del PDF se procesará en el servidor.
-                        </p>
+                        <p className="sn-pdf-info__note">El contenido del PDF se procesará en el servidor.</p>
                         <div className="sn-preview__actions">
-                            <button type="button" className="sn-btn-primary" onClick={handleImport}>
-                                Subir PDF
-                            </button>
-                            <button type="button" className="sn-btn-ghost" onClick={handleReset}>
-                                Cancelar
-                            </button>
+                            <button type="button" className="sn-btn-primary" onClick={handleImport}>Subir PDF</button>
+                            <button type="button" className="sn-btn-ghost"    onClick={handleReset}>Cancelar</button>
                         </div>
                     </div>
                 )}
@@ -339,9 +354,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                 )}
                             </ul>
                         )}
-                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>
-                            Nueva Carga
-                        </button>
+                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>Nueva Carga</button>
                     </div>
                 )}
 
@@ -351,9 +364,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         <CheckCircle2 size={28} className="sn-result__icon" />
                         <p className="sn-result__title">PDF subido correctamente</p>
                         <p className="sn-result__detail">{state.filename}</p>
-                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>
-                            Nueva Carga
-                        </button>
+                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>Nueva Carga</button>
                     </div>
                 )}
 
@@ -363,9 +374,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         <AlertCircle size={28} className="sn-result__icon" />
                         <p className="sn-result__title">Error</p>
                         <p className="sn-result__detail">{state.message}</p>
-                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>
-                            Intentar de nuevo
-                        </button>
+                        <button type="button" className="sn-btn-ghost" onClick={handleReset}>Intentar de nuevo</button>
                     </div>
                 )}
 
@@ -377,13 +386,13 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                             <p className="sn-info-block__title">Mapeo Automático de Datos</p>
                             <p className="sn-info-block__body">
                                 El sistema identifica columnas por nombre: <code>nombreCompleto</code>,{' '}
-                                <code>carnetId</code>, <code>correoInstitucional</code>, <code>faseAcademica</code>.
+                                <code>carnetId</code>, <code>correoInstitucional</code>.
+                                La fase académica se selecciona antes de importar.
                             </p>
                         </div>
                     </div>
                 )}
 
-                {/* Input de archivo oculto */}
                 <input
                     ref={fileInputRef}
                     type="file"

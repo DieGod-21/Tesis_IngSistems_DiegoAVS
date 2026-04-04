@@ -455,6 +455,13 @@
     margin: 0;
 }
 
+.sn-preview__phase-select {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+}
+
 .sn-preview__table-wrap {
     overflow-x: auto;
     border: 1px solid var(--dash-border);

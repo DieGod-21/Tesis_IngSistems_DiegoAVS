@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
-const { FASES_VALIDAS, TIPOS } = require('../constants');
+const { TIPOS } = require('../constants');
+const { validatePhaseName } = require('../utils/phases');
 
 const TIPOS_VALIDOS = TIPOS.evento;
 
@@ -14,8 +15,9 @@ const getAll = async (req, res, next) => {
     if (tipo && !TIPOS_VALIDOS.includes(tipo)) {
       return res.status(400).json({ error: `tipo debe ser uno de: ${TIPOS_VALIDOS.join(', ')}` });
     }
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     let query = `SELECT ${EVENT_COLS} FROM events WHERE 1=1`;
@@ -55,8 +57,9 @@ const create = async (req, res, next) => {
     if (!TIPOS_VALIDOS.includes(tipo)) {
       return res.status(400).json({ error: `tipo debe ser uno de: ${TIPOS_VALIDOS.join(', ')}` });
     }
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
     if (fecha_fin && new Date(fecha_fin) <= new Date(fecha_inicio)) {
       return res.status(400).json({ error: 'fecha_fin debe ser posterior a fecha_inicio' });

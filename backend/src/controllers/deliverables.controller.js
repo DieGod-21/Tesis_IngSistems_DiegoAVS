@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
-const { FASES_VALIDAS, ESTADOS } = require('../constants');
+const { ESTADOS } = require('../constants');
+const { validatePhaseName } = require('../utils/phases');
 
 const ESTADOS_VALIDOS = ESTADOS.entregable;
 
@@ -10,8 +11,9 @@ const getTemplates = async (req, res, next) => {
   try {
     const { fase_academica } = req.query;
 
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     let query = `SELECT ${TEMPLATE_RETURNING} FROM deliverable_templates WHERE 1=1`;
@@ -46,9 +48,8 @@ const createTemplate = async (req, res, next) => {
     if (!nombre?.trim() || !fase_academica || orden == null) {
       return res.status(400).json({ error: 'nombre, fase_academica y orden son requeridos' });
     }
-    if (!FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
-    }
+    const phaseErr = await validatePhaseName(fase_academica);
+    if (phaseErr) return res.status(400).json({ error: phaseErr });
     if (!Number.isInteger(Number(orden)) || Number(orden) < 1) {
       return res.status(400).json({ error: 'orden debe ser un número entero positivo' });
     }

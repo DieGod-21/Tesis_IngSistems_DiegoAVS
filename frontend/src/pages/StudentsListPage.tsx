@@ -127,8 +127,8 @@ const StudentsListPage: React.FC = () => {
                     </div>
                     <div className="sl-kpi-item">
                         <span className="sl-kpi-item__label">Fases</span>
-                        <span className="sl-kpi-item__value">{kpis.pg1}/{kpis.pg2}</span>
-                        <span className="sl-kpi-item__sub">PG1 / PG2</span>
+                        <span className="sl-kpi-item__value">{Object.keys(kpis.byFase).length}</span>
+                        <span className="sl-kpi-item__sub">distintas</span>
                     </div>
                 </div>
 
@@ -216,9 +216,12 @@ const StudentsListPage: React.FC = () => {
                                         {/* Fase */}
                                         <td className="sl-table__td">
                                             <span
-                                                className={`sl-phase-badge sl-phase-badge--${(student.faseAcademica ?? '').toLowerCase()}`}
+                                                className={`sl-phase-badge sl-phase-badge--${(student.phaseName ?? student.faseAcademica ?? '').toLowerCase()}`}
+                                                title={student.phaseName ? `${student.phaseName}` : undefined}
                                             >
-                                                {student.faseAcademica ?? '—'}
+                                                {student.phaseDescription
+                                                    ? <>{student.phaseDescription} <small>({student.phaseName})</small></>
+                                                    : student.faseAcademica ?? '—'}
                                             </span>
                                         </td>
                                         {/* Badge estado */}

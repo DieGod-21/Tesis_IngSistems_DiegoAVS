@@ -112,60 +112,59 @@ const STATIC_RESOURCES: FacultyResource[] = [
 
 /**
  * Obtiene el resumen del dashboard.
- * Los KPIs se calculan a partir de los datos reales de estudiantes.
+ * Los KPIs por fase se generan dinámicamente desde los datos de estudiantes —
+ * no hay nombres de fase hardcodeados.
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
     const students = await apiFetch<BackendStudent[]>('/students');
 
-    const total       = students.length;
-    const approved    = students.filter((s) => s.approved).length;
-    const pending     = total - approved;
-    const anteproyecto = students.filter((s) => s.fase_academica === 'anteproyecto').length;
-    const tesis       = students.filter((s) => s.fase_academica === 'tesis').length;
-    const eps         = students.filter((s) => s.fase_academica === 'eps').length;
-
+    const total    = students.length;
+    const approved = students.filter((s) => s.approved).length;
+    const pending  = total - approved;
     const completionPct = total > 0 ? Math.round((approved / total) * 100) : 0;
 
+    // Agrupar por academic_phase_id (clave estable) — el nombre es solo para display.
+    // Esto evita duplicados si se renombra una fase en la BD.
+    const countByPhase = new Map<string, { count: number; description: string }>();
+    for (const s of students) {
+        const key   = s.academic_phase_id != null ? String(s.academic_phase_id) : (s.fase_academica ?? '—');
+        const label = s.phase_description ?? s.phase_name ?? s.fase_academica ?? '—';
+        const cur   = countByPhase.get(key) ?? { count: 0, description: label };
+        countByPhase.set(key, { count: cur.count + 1, description: label });
+    }
+
+    const phaseKpis: KpiData[] = Array.from(countByPhase.entries()).map(([key, { count, description }]) => ({
+        id:            `kpi-phase-${key}`,
+        label:         description,
+        value:         String(count),
+        trend:         '',
+        trendPositive: true,
+        description:   `Estudiantes en ${description}`,
+        iconName:      'GraduationCap',
+        iconVariant:   'blue' as const,
+    }));
+
     const kpis: KpiData[] = [
+        ...phaseKpis,
         {
-            id: 'kpi-anteproyecto',
-            label: 'Anteproyecto',
-            value: String(anteproyecto),
-            trend: '',
-            trendPositive: true,
-            description: 'Estudiantes en fase de anteproyecto',
-            iconName: 'FileText',
-            iconVariant: 'blue',
-        },
-        {
-            id: 'kpi-tesis-eps',
-            label: 'Tesis / EPS',
-            value: String(tesis + eps),
-            trend: '',
-            trendPositive: true,
-            description: `${tesis} en tesis · ${eps} en EPS`,
-            iconName: 'GraduationCap',
-            iconVariant: 'blue',
-        },
-        {
-            id: 'kpi-pending',
-            label: 'Sin Aprobar',
-            value: String(pending),
-            trend: '',
+            id:            'kpi-pending',
+            label:         'Sin Aprobar',
+            value:         String(pending),
+            trend:         '',
             trendPositive: pending === 0,
-            description: 'Expedientes pendientes de revisión',
-            iconName: 'AlertTriangle',
-            iconVariant: pending > 0 ? 'red' : 'blue',
+            description:   'Expedientes pendientes de revisión',
+            iconName:      'AlertTriangle',
+            iconVariant:   pending > 0 ? 'red' : 'blue',
         },
         {
-            id: 'kpi-completion',
-            label: 'Completación',
-            value: `${completionPct}%`,
-            trend: '',
+            id:            'kpi-completion',
+            label:         'Completación',
+            value:         `${completionPct}%`,
+            trend:         '',
             trendPositive: true,
-            description: `${approved} de ${total} aprobados`,
-            iconName: 'CheckCircle',
-            iconVariant: 'blue',
+            description:   `${approved} de ${total} aprobados`,
+            iconName:      'CheckCircle',
+            iconVariant:   'blue',
             progressValue: completionPct,
         },
     ];
@@ -201,7 +200,7 @@ export async function getPendingActions(query?: string): Promise<PendingAction[]
             avatarInitials: initials(s.nombre_completo),
             avatarVariant: AVATAR_VARIANTS[i % AVATAR_VARIANTS.length],
             projectTitle:  s.correo_institucional,
-            phase:         s.fase_academica,
+            phase:         s.phase_description ?? s.phase_name ?? s.fase_academica ?? '—',
             actionLabel:   'Pendiente de aprobación',
             actionVariant: 'warning',
             deadline:      'Sin fecha límite',

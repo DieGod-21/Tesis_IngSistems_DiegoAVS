@@ -7,8 +7,6 @@
 
 // ─── Modelo de dominio (camelCase, usado en toda la UI) ──────────────
 
-export type FaseAcademica = 'anteproyecto' | 'tesis' | 'eps';
-
 export interface Student {
     id: string;
     nombreCompleto: string;
@@ -18,10 +16,17 @@ export interface Student {
     semestreLectivo: string;
     /** UUID del semestre en la base de datos */
     semesterId: string;
-    faseAcademica: FaseAcademica;
+    /** @deprecated usar academicPhaseId + phaseName + phaseDescription */
+    faseAcademica: string;
+    /** ID numérico en academic_phases */
+    academicPhaseId: number | null;
+    /** Código de fase (ej. "anteproyecto") */
+    phaseName: string | null;
+    /** Etiqueta legible (ej. "Anteproyecto de Tesis") */
+    phaseDescription: string | null;
     approved: boolean;
-    createdAt: string;  // ISO 8601
-    updatedAt: string;  // ISO 8601
+    createdAt: string;
+    updatedAt: string;
 }
 
 // ─── Respuesta directa del API (snake_case) ──────────────────────────
@@ -37,8 +42,10 @@ export interface BackendStudent {
     created_by: string;
     created_at: string;
     updated_at: string;
-    /** Nombre del semestre (JOIN con semesters) */
     semestre: string | null;
+    academic_phase_id: number | null;
+    phase_name: string | null;
+    phase_description: string | null;
 }
 
 // ─── Mapper ──────────────────────────────────────────────────────────
@@ -51,7 +58,10 @@ export function mapBackendStudent(s: BackendStudent): Student {
         correoInstitucional:  s.correo_institucional,
         semestreLectivo:      s.semestre ?? s.semester_id,
         semesterId:           s.semester_id,
-        faseAcademica:        s.fase_academica as FaseAcademica,
+        faseAcademica:        s.fase_academica,
+        academicPhaseId:      s.academic_phase_id ?? null,
+        phaseName:            s.phase_name ?? null,
+        phaseDescription:     s.phase_description ?? null,
         approved:             s.approved,
         createdAt:            s.created_at,
         updatedAt:            s.updated_at,

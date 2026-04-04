@@ -6,7 +6,7 @@
  */
 
 import { apiFetch } from './apiClient';
-import type { Student, BackendStudent, FaseAcademica } from '../types/student';
+import type { Student, BackendStudent } from '../types/student';
 import { mapBackendStudent } from '../types/student';
 
 // ─── Lectura ─────────────────────────────────────────────────────────
@@ -45,18 +45,14 @@ export function computeStudentKpis(students: Student[]) {
     const total    = students.length;
     const approved = students.filter((s) => s.approved).length;
     const pending  = total - approved;
-    const byFase   = students.reduce<Record<string, number>>((acc, s) => {
-        acc[s.faseAcademica] = (acc[s.faseAcademica] ?? 0) + 1;
+
+    // Agrupar por academicPhaseId (clave estable) — evita duplicados si se renombra una fase.
+    const byFase = students.reduce<Record<string, number>>((acc, s) => {
+        const key = s.academicPhaseId != null ? String(s.academicPhaseId) : (s.phaseName ?? '—');
+        acc[key] = (acc[key] ?? 0) + 1;
         return acc;
     }, {});
 
-    // Compatibilidad con componentes que esperan pg1/pg2
-    const pg1 = byFase['anteproyecto'] ?? 0;
-    const pg2 = (byFase['tesis'] ?? 0) + (byFase['eps'] ?? 0);
-
-    return { total, approved, pending, pg1, pg2, byFase };
+    return { total, approved, pending, byFase };
 }
 
-// ─── Helpers de tipo ──────────────────────────────────────────────────
-
-export type { FaseAcademica };

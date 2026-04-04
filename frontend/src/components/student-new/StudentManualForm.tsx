@@ -2,9 +2,9 @@
  * StudentManualForm.tsx
  *
  * Formulario de registro manual de estudiantes.
- * - Carga semestres dinámicamente desde GET /api/semesters
- * - Usa las fases académicas reales del backend: anteproyecto, tesis, eps
- * - Valida y envía via POST /api/students
+ * - Carga semestres desde GET /api/semesters
+ * - Carga fases académicas desde GET /api/academic-phases
+ * - Valida y envía via POST /api/students con academic_phase_id
  */
 
 import React, { useEffect, useState } from 'react';
@@ -13,10 +13,10 @@ import { User, CreditCard, Mail, BookOpen, GraduationCap, Save, Trash2 } from 'l
 import {
     createStudent,
     getSemesters,
-    FASE_LABELS,
-    FASES_VALIDAS,
 } from '../../services/studentsService';
 import type { StudentPayload, Semester } from '../../services/studentsService';
+import { getAcademicPhases } from '../../services/academicPhasesService';
+import type { AcademicPhase } from '../../services/academicPhasesService';
 import { useForm } from '../../hooks/useForm';
 import { runValidators, validators } from '../../utils/validators';
 
@@ -27,7 +27,7 @@ type FormFields = {
     carnetId:            string;
     correoInstitucional: string;
     semesterId:          string;
-    faseAcademica:       string;
+    academicPhaseId:     string;  // string en el form, se convierte a number al enviar
 };
 
 const EMPTY_FORM: FormFields = {
@@ -35,7 +35,7 @@ const EMPTY_FORM: FormFields = {
     carnetId:            '',
     correoInstitucional: '',
     semesterId:          '',
-    faseAcademica:       '',
+    academicPhaseId:     '',
 };
 
 // ─── Validación ──────────────────────────────────────────────────────
@@ -62,8 +62,8 @@ function validate(values: FormFields) {
     const semestre = validators.select('un semestre')(values.semesterId);
     if (semestre) errors.semesterId = semestre;
 
-    const fase = validators.select('una fase académica')(values.faseAcademica);
-    if (fase) errors.faseAcademica = fase;
+    const fase = validators.select('una fase académica')(values.academicPhaseId);
+    if (fase) errors.academicPhaseId = fase;
 
     return errors;
 }
@@ -71,19 +71,24 @@ function validate(values: FormFields) {
 // ─── Componente ──────────────────────────────────────────────────────
 
 const StudentManualForm: React.FC = () => {
-    const [semesters, setSemesters]       = useState<Semester[]>([]);
-    const [semLoading, setSemLoading]     = useState(true);
-    const [toast, setToast]               = useState<{ open: boolean; message: string; color: string }>({
+    const [semesters, setSemesters]         = useState<Semester[]>([]);
+    const [semLoading, setSemLoading]       = useState(true);
+    const [phases, setPhases]               = useState<AcademicPhase[]>([]);
+    const [phasesLoading, setPhasesLoading] = useState(true);
+    const [toast, setToast] = useState<{ open: boolean; message: string; color: string }>({
         open: false, message: '', color: 'success',
     });
 
-    // Carga semestres al montar
     useEffect(() => {
         let canceled = false;
         getSemesters()
             .then((data) => { if (!canceled) setSemesters(data); })
-            .catch(() => { /* silencioso — select queda vacío */ })
+            .catch(() => {})
             .finally(() => { if (!canceled) setSemLoading(false); });
+        getAcademicPhases()
+            .then((data) => { if (!canceled) setPhases(data); })
+            .catch(() => {})
+            .finally(() => { if (!canceled) setPhasesLoading(false); });
         return () => { canceled = true; };
     }, []);
 
@@ -98,14 +103,14 @@ const StudentManualForm: React.FC = () => {
                         carnetId:            vals.carnetId,
                         correoInstitucional: vals.correoInstitucional,
                         semesterId:          vals.semesterId,
-                        faseAcademica:       vals.faseAcademica,
+                        academicPhaseId:     Number(vals.academicPhaseId),
                     };
                     await createStudent(payload);
                     setToast({ open: true, message: 'Estudiante registrado exitosamente.', color: 'success' });
                 } catch (err: unknown) {
                     const msg = err instanceof Error ? err.message : 'Error al registrar. Intenta de nuevo.';
                     setToast({ open: true, message: msg, color: 'danger' });
-                    throw err; // re-throw para que useForm no haga reset
+                    throw err;
                 }
             },
         });
@@ -230,25 +235,30 @@ const StudentManualForm: React.FC = () => {
                             <label className="sn-form__label" htmlFor="sn-fase">
                                 Fase Académica <span className="sn-form__required">*</span>
                             </label>
-                            <div className={`sn-field${showError('faseAcademica') ? ' sn-field--error' : ''}`}>
+                            <div className={`sn-field${showError('academicPhaseId') ? ' sn-field--error' : ''}`}>
                                 <GraduationCap size={16} className="sn-field__icon" aria-hidden="true" />
                                 <select
                                     id="sn-fase"
                                     className="sn-field__input sn-field__select"
-                                    value={values.faseAcademica}
-                                    onChange={(e) => handleChange('faseAcademica', e.target.value)}
-                                    onBlur={() => handleBlur('faseAcademica')}
+                                    value={values.academicPhaseId}
+                                    onChange={(e) => handleChange('academicPhaseId', e.target.value)}
+                                    onBlur={() => handleBlur('academicPhaseId')}
                                     aria-describedby="sn-fase-error"
-                                    aria-invalid={!!showError('faseAcademica')}
+                                    aria-invalid={!!showError('academicPhaseId')}
+                                    disabled={phasesLoading}
                                 >
-                                    <option value="">Seleccionar fase</option>
-                                    {FASES_VALIDAS.map((f) => (
-                                        <option key={f} value={f}>{FASE_LABELS[f]}</option>
+                                    <option value="">
+                                        {phasesLoading ? 'Cargando fases…' : 'Seleccionar fase'}
+                                    </option>
+                                    {phases.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.description ?? p.name} ({p.name})
+                                        </option>
                                     ))}
                                 </select>
                             </div>
                             <p id="sn-fase-error" className="sn-field__error" role="alert">
-                                {showError('faseAcademica') ?? ''}
+                                {showError('academicPhaseId') ?? ''}
                             </p>
                         </div>
                     </div>

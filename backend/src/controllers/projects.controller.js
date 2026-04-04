@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
-const { FASES_VALIDAS, ESTADOS } = require('../constants');
+const { ESTADOS } = require('../constants');
+const { validatePhaseName } = require('../utils/phases');
 
 const ESTADOS_VALIDOS = ESTADOS.proyecto;
 
@@ -13,8 +14,9 @@ const getAll = async (req, res, next) => {
     if (estado && !ESTADOS_VALIDOS.includes(estado)) {
       return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
     }
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     let query = `
@@ -102,9 +104,8 @@ const create = async (req, res, next) => {
     if (!titulo?.trim() || !fase_academica || !semester_id) {
       return res.status(400).json({ error: 'titulo, fase_academica y semester_id son requeridos' });
     }
-    if (!FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
-    }
+    const phaseErr = await validatePhaseName(fase_academica);
+    if (phaseErr) return res.status(400).json({ error: phaseErr });
     if (!ESTADOS_VALIDOS.includes(estado)) {
       return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
     }
@@ -129,8 +130,9 @@ const update = async (req, res, next) => {
     const { id } = req.params;
     const { titulo, descripcion, fase_academica, estado, semester_id, es_grupal } = req.body;
 
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
     if (estado && !ESTADOS_VALIDOS.includes(estado)) {
       return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });

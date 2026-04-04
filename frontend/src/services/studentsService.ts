@@ -13,17 +13,6 @@ import type { BackendStudent } from '../types/student';
 /** Dominios válidos para correo institucional */
 export const ALLOWED_EMAIL_DOMAINS = ['@miumg.edu.gt', '@umg.edu.gt'];
 
-/** Fases académicas válidas según el backend */
-export const FASES_VALIDAS = ['anteproyecto', 'tesis', 'eps'] as const;
-export type FaseValida = typeof FASES_VALIDAS[number];
-
-/** Etiquetas de display para cada fase */
-export const FASE_LABELS: Record<FaseValida, string> = {
-    anteproyecto: 'Anteproyecto de Tesis',
-    tesis:        'Tesis de Grado',
-    eps:          'Ejercicio Profesional Supervisado (EPS)',
-};
-
 /** Semestre devuelto por GET /api/semesters */
 export interface Semester {
     id: string;
@@ -39,7 +28,8 @@ export interface StudentPayload {
     correoInstitucional: string;
     /** UUID del semestre */
     semesterId: string;
-    faseAcademica: string;
+    /** ID numérico de la fase en academic_phases */
+    academicPhaseId: number;
 }
 
 /** Una fila parseada de un archivo Excel/CSV */
@@ -49,7 +39,6 @@ export interface ParsedRow {
     carnetId?: string;
     correoInstitucional?: string;
     semestreLectivo?: string;
-    faseAcademica?: string;
     [key: string]: unknown;
 }
 
@@ -79,7 +68,6 @@ export interface UploadItem {
 
 // ─── Semesters ──────────────────────────────────────────────────────
 
-/** Obtiene la lista de semestres desde GET /api/semesters */
 export async function getSemesters(): Promise<Semester[]> {
     return apiFetch<Semester[]>('/semesters');
 }
@@ -87,8 +75,8 @@ export async function getSemesters(): Promise<Semester[]> {
 // ─── Estudiantes ─────────────────────────────────────────────────────
 
 /**
- * Registra un estudiante individualmente via POST /api/students.
- * El backend espera campos en snake_case.
+ * Registra un estudiante via POST /api/students.
+ * Envía academic_phase_id (nuevo campo relacional).
  */
 export async function createStudent(payload: StudentPayload): Promise<BackendStudent> {
     return apiFetch<BackendStudent>('/students', {
@@ -98,13 +86,13 @@ export async function createStudent(payload: StudentPayload): Promise<BackendStu
             carnet_id:            payload.carnetId.trim(),
             correo_institucional: payload.correoInstitucional.trim(),
             semester_id:          payload.semesterId,
-            fase_academica:       payload.faseAcademica,
+            academic_phase_id:    payload.academicPhaseId,
             approved:             false,
         }),
     });
 }
 
-// ─── Tipos de respuesta del backend para historial ────────────────────
+// ─── Historial ────────────────────────────────────────────────────────
 
 interface BackendUpload {
     id: string;
@@ -118,20 +106,18 @@ interface BackendUpload {
 
 /**
  * Importa filas desde Excel/CSV usando POST /api/students/bulk.
- * El backend valida cada fila y retorna el resumen con errores por fila.
- * semesterId es obligatorio para la inserción; si no se provee se usa el
- * valor de semestreLectivo de cada fila (fallback: string vacío → backend rechaza).
+ * Acepta defaultPhaseId para asignar la misma fase a todas las filas.
  */
 export async function importStudents(
     rows: ParsedRow[],
     semesterId?: string,
+    defaultPhaseId?: number,
 ): Promise<ImportResult> {
-    // Construir payload para el backend
     const filas = rows.map((row) => ({
         nombre_completo:      (row.nombreCompleto ?? '').trim(),
         carnet_id:            (row.carnetId ?? '').trim(),
         correo_institucional: (row.correoInstitucional ?? '').trim(),
-        fase_academica:       (row.faseAcademica ?? 'anteproyecto').trim(),
+        academic_phase_id:    defaultPhaseId,
         semester_id:          semesterId ?? (row.semestreLectivo ?? '').trim(),
         approved:             false,
     }));
@@ -141,22 +127,17 @@ export async function importStudents(
         body: JSON.stringify({ filas }),
     });
 
-    // Normalizar respuesta del backend al formato ImportResult del frontend
-    const result: ImportResult = {
+    return {
         imported: resp.importados,
         rejected: resp.rechazados,
         errors:   resp.errores.map((e) => ({ row: e.fila, reason: e.razon })),
     };
-
-    return result;
 }
 
-/** Sube un PDF (sin endpoint de backend — no genera historial en BD). */
 export async function uploadPdf(_file: File): Promise<void> {
     // PDF processing is handled server-side when backend endpoint is added
 }
 
-/** Descarga la plantilla Excel de carga masiva desde el backend. */
 export async function downloadTemplate(): Promise<void> {
     const token = localStorage.getItem('auth_token');
     const base  = import.meta.env.VITE_API_URL ?? '/api';
@@ -173,7 +154,6 @@ export async function downloadTemplate(): Promise<void> {
     URL.revokeObjectURL(url);
 }
 
-/** Obtiene el historial de cargas recientes desde el backend. */
 export async function getRecentUploads(): Promise<UploadItem[]> {
     const rows = await apiFetch<BackendUpload[]>('/uploads');
     return rows.map((r) => ({

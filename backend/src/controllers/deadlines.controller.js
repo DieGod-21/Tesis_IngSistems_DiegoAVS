@@ -1,5 +1,5 @@
 const pool = require('../db/pool');
-const { FASES_VALIDAS } = require('../constants');
+const { validatePhaseName } = require('../utils/phases');
 
 const DEADLINE_COLS = `id, titulo, descripcion, fecha, semester_id,
                        fase_academica, created_by, created_at, updated_at`;
@@ -8,8 +8,9 @@ const getAll = async (req, res, next) => {
   try {
     const { semester_id, fase_academica } = req.query;
 
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     let query = `SELECT ${DEADLINE_COLS} FROM academic_deadlines WHERE 1=1`;
@@ -45,8 +46,9 @@ const create = async (req, res, next) => {
     if (!titulo?.trim() || !fecha || !semester_id) {
       return res.status(400).json({ error: 'titulo, fecha y semester_id son requeridos' });
     }
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     const created_by = req.user.user_id;
@@ -68,8 +70,9 @@ const update = async (req, res, next) => {
   try {
     const { titulo, descripcion, fecha, fase_academica } = req.body;
 
-    if (fase_academica && !FASES_VALIDAS.includes(fase_academica)) {
-      return res.status(400).json({ error: `fase_academica debe ser uno de: ${FASES_VALIDAS.join(', ')}` });
+    if (fase_academica) {
+      const err = await validatePhaseName(fase_academica);
+      if (err) return res.status(400).json({ error: err });
     }
 
     const { rows } = await pool.query(
