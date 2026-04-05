@@ -454,6 +454,49 @@
    BLUE THEME — Acentos semánticos por sección
 ═══════════════════════════════════════════════════════════════════ */
 
+/* ─── Fila con cambio pendiente (cooldown activo) ─── */
+.sl-table__tr--pending {
+    background: rgba(251, 191, 36, 0.05);
+}
+
+/* ─── Botón Deshacer con barra de cuenta regresiva ─── */
+.sl-undo-btn {
+    position: relative;
+    overflow: hidden;
+    padding: 4px 10px;
+    border: 1.5px solid var(--color-warning);
+    background: var(--color-warning-light);
+    color: #92400e;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 150ms, border-color 150ms;
+}
+
+.sl-undo-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    background: var(--color-warning);
+    transform-origin: left;
+    animation: sl-countdown 4s linear forwards;
+}
+
+@keyframes sl-countdown {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+}
+
+.sl-undo-btn:hover {
+    background: #fde68a;
+    border-color: #d97706;
+}
+
 /* KPI strip: colores semánticos por posición */
 .sl-kpi-item:nth-child(1) { border-top: 3px solid var(--umg-navy); }
 .sl-kpi-item:nth-child(2) { border-top: 3px solid var(--color-success); }

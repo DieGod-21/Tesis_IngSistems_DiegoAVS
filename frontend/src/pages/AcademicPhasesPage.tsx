@@ -278,7 +278,9 @@ const AcademicPhasesPage: React.FC = () => {
                                 </tr>
                             )}
 
-                            {!loading && phases.map((phase) =>
+                            {!loading && [...phases]
+                            .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' }))
+                            .map((phase) =>
                                 editId === phase.id ? (
                                     /* ── Fila en modo edición ── */
                                     <tr key={phase.id} className="sl-table__tr ap-row--editing">

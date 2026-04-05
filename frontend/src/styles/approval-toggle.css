@@ -28,7 +28,7 @@
     --at-duration: 220ms;
     --at-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
     /* spring ligera */
-    --at-off-bg: #cbd5e1;
+    --at-off-bg: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
     --at-on-bg: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
     --at-thumb-bg: rgba(255, 255, 255, 0.96);
     --at-thumb-shadow: 0 2px 6px rgba(0, 0, 0, 0.22), 0 0 1px rgba(0, 0, 0, 0.12);
@@ -130,6 +130,10 @@
 
 .at-root[data-checked="true"] .at-label {
     color: #16a34a;
+}
+
+.at-root[data-checked="false"] .at-label {
+    color: #dc2626;
 }
 
 /* ─── Accesibilidad — prefers-reduced-motion ────────────────────── */

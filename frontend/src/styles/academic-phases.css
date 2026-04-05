@@ -65,7 +65,7 @@
 .ap-create-title {
     font-size: 18px;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--umg-blue, #003366);
     margin: 0;
     line-height: 1.3;
 }
@@ -105,7 +105,7 @@
 .ap-field__label {
     font-size: 13px;
     font-weight: 600;
-    color: #374151;
+    color: var(--umg-blue, #003366);
     letter-spacing: 0.01em;
 }
 

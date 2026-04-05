@@ -5,9 +5,8 @@
  *   - Carga de estudiantes desde studentStore
  *   - KPIs computados
  *   - Búsqueda + filtro por estado
- *   - Optimistic UI para el toggle de aprobación,
- *     con cleanup de setTimeout para evitar memory leaks
- *     si el componente se desmonta antes de resolverse.
+ *   - Optimistic UI para el toggle de aprobación con cooldown de 4 s
+ *     y capacidad de deshacer antes de que se confirme la llamada API.
  *
  * DashboardPage puede importar solo useStudentsDashboard;
  * este hook es específico de StudentsListPage.
@@ -24,12 +23,17 @@ import { useToast } from '../context/ToastContext';
 
 export type StatusFilter = 'all' | 'approved' | 'pending';
 
+const COOLDOWN_MS = 4000;
+
 export function useStudentsList(initialQuery = '') {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
     const [query, setQuery] = useState(initialQuery);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+    const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
     const isMountedRef = useRef(true);
+    const previousValuesRef = useRef<Map<string, boolean>>(new Map());
+    const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
     const { toast } = useToast();
 
     // ── Carga inicial (async) ─────────────────────────────────────────
@@ -52,32 +56,68 @@ export function useStudentsList(initialQuery = '') {
         return () => {
             canceled = true;
             isMountedRef.current = false;
+            timeoutsRef.current.forEach(clearTimeout);
         };
     }, []);
 
-    // ── Toggle de aprobación (Optimistic UI) ─────────────────────────
+    // ── Toggle de aprobación con cooldown ─────────────────────────────
 
     const handleToggle = useCallback((id: string, next: boolean) => {
-        // 1. Actualización optimista inmediata en UI
-        setStudents((prev) =>
-            prev.map((s) =>
-                s.id === id ? { ...s, approved: next, updatedAt: new Date().toISOString() } : s,
-            ),
-        );
+        // Cancelar cooldown previo si existía
+        const existingTid = timeoutsRef.current.get(id);
+        if (existingTid !== undefined) {
+            clearTimeout(existingTid);
+            timeoutsRef.current.delete(id);
+        }
 
-        // 2. Persistir via API (async) con UI optimista.
-        updateStudentStatus(id, next)
-            .then(() => {
-                if (isMountedRef.current) {
-                    toast.success(next ? 'Estudiante aprobado correctamente' : 'Aprobación revertida');
-                }
-            })
-            .catch(() => {
-                if (isMountedRef.current) {
-                    setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
-                    toast.error('No se pudo actualizar el estado. Intenta de nuevo.');
-                }
-            });
+        // Actualización optimista + guardar valor previo para deshacer
+        setStudents((prev) => {
+            if (!previousValuesRef.current.has(id)) {
+                const old = prev.find((s) => s.id === id);
+                if (old) previousValuesRef.current.set(id, old.approved);
+            }
+            return prev.map((s) =>
+                s.id === id ? { ...s, approved: next, updatedAt: new Date().toISOString() } : s,
+            );
+        });
+
+        setPendingIds((prev) => { const s = new Set(prev); s.add(id); return s; });
+
+        // Confirmar via API después del cooldown
+        const tid = setTimeout(() => {
+            timeoutsRef.current.delete(id);
+            previousValuesRef.current.delete(id);
+            setPendingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+            updateStudentStatus(id, next)
+                .then(() => {
+                    if (isMountedRef.current)
+                        toast.success(next ? 'Estudiante aprobado correctamente' : 'Aprobación revertida');
+                })
+                .catch(() => {
+                    if (isMountedRef.current) {
+                        setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: !next } : s));
+                        toast.error('No se pudo actualizar el estado. Intenta de nuevo.');
+                    }
+                });
+        }, COOLDOWN_MS);
+
+        timeoutsRef.current.set(id, tid);
+    }, [toast]);
+
+    // ── Deshacer toggle (mientras está en cooldown) ───────────────────
+
+    const undoToggle = useCallback((id: string) => {
+        const tid = timeoutsRef.current.get(id);
+        if (tid !== undefined) {
+            clearTimeout(tid);
+            timeoutsRef.current.delete(id);
+        }
+        const prevValue = previousValuesRef.current.get(id);
+        if (prevValue !== undefined) {
+            setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: prevValue } : s));
+            previousValuesRef.current.delete(id);
+        }
+        setPendingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
     }, []);
 
     // ── KPIs ─────────────────────────────────────────────────────────
@@ -112,6 +152,8 @@ export function useStudentsList(initialQuery = '') {
         statusFilter,
         setStatusFilter,
         handleToggle,
+        undoToggle,
+        pendingIds,
         kpis,
         filtered,
     } as const;

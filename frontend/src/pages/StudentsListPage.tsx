@@ -65,6 +65,8 @@ const StudentsListPage: React.FC = () => {
         statusFilter,
         setStatusFilter,
         handleToggle,
+        undoToggle,
+        pendingIds,
         kpis,
         filtered,
     } = useStudentsList(initialQuery);
@@ -192,7 +194,7 @@ const StudentsListPage: React.FC = () => {
                             )}
                             {!loading &&
                                 filtered.map((student) => (
-                                    <tr key={student.id} className="sl-table__tr">
+                                    <tr key={student.id} className={`sl-table__tr${pendingIds.has(student.id) ? ' sl-table__tr--pending' : ''}`}>
                                         {/* Nombre + Carnet */}
                                         <td className="sl-table__td">
                                             <div className="sl-student-cell">
@@ -234,8 +236,18 @@ const StudentsListPage: React.FC = () => {
                                                 <ApprovalToggle
                                                     checked={student.approved}
                                                     onChange={(next) => handleToggle(student.id, next)}
-                                                    label={student.approved ? 'Aprobado' : 'Pendiente'}
+                                                    label={student.approved ? 'Aprobado' : 'Rechazado'}
                                                 />
+                                                {pendingIds.has(student.id) && (
+                                                    <button
+                                                        type="button"
+                                                        className="sl-undo-btn"
+                                                        onClick={() => undoToggle(student.id)}
+                                                        aria-label="Deshacer cambio de aprobación"
+                                                    >
+                                                        Deshacer
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
