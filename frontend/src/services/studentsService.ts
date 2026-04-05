@@ -38,9 +38,11 @@ export interface ParsedRow {
     /** Nombre completo del estudiante (columna "Full Name") */
     fullName?: string;
     carnetId?: string;
+    /** Correo institucional opcional (columna "Email (optional)") */
+    email?: string;
     /** Nombre de la fase académica (columna "Academic Phase") */
     academicPhase?: string;
-    /** Valor de aprobación: "aprobado" | "desaprobado" | boolean */
+    /** Estado de aprobación: "aprobado" | "desaprobado" | boolean (columna "Status") */
     approved?: string | boolean;
     [key: string]: unknown;
 }
@@ -49,7 +51,8 @@ export interface ParsedRow {
 export interface ImportResult {
     imported: number;
     rejected: number;
-    errors: Array<{ row: number; reason: string }>;
+    total: number;
+    errors: Array<{ row: number; carnetId: string; reason: string }>;
 }
 
 /** Respuesta del endpoint POST /api/students/bulk */
@@ -60,13 +63,25 @@ interface BulkResponse {
     errores: Array<{ fila: number; carnet_id: string; razon: string }>;
 }
 
-/** Ítem de carga reciente (historial local) */
+/** Un error de fila devuelto por el historial */
+export interface UploadError {
+    fila: number;
+    carnet_id: string;
+    razon: string;
+}
+
+/** Ítem de carga reciente (historial) */
 export interface UploadItem {
     id: string;
     filename: string;
     status: 'success' | 'error' | 'pending';
     uploadedAt: string;
     type: 'excel' | 'pdf';
+    imported: number;
+    rejected: number;
+    total: number;
+    errors: UploadError[];
+    uploadedBy: string;
 }
 
 // ─── Semesters ──────────────────────────────────────────────────────
@@ -104,7 +119,10 @@ interface BackendUpload {
     status: 'success' | 'error';
     imported: number;
     rejected: number;
+    total_rows: number;
+    errors: UploadError[];
     created_at: string;
+    uploaded_by: string | null;
 }
 
 /**
@@ -112,10 +130,12 @@ interface BackendUpload {
  * Cada fila puede traer su propia fase académica y estado de aprobación.
  */
 export async function importStudents(rows: ParsedRow[]): Promise<ImportResult> {
+    const clean = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, ' ').replace(/\*/g, '').trim();
     const filas = rows.map((row) => ({
-        full_name: (row.fullName  ?? '').trim(),
-        carnet_id: (row.carnetId  ?? '').trim(),
-        phase:     (row.academicPhase ?? '').trim(),
+        full_name: clean(row.fullName),
+        carnet_id: clean(row.carnetId),
+        email:     clean(row.email) || undefined,
+        phase:     clean(row.academicPhase),
         approved:  row.approved,
     }));
 
@@ -127,7 +147,8 @@ export async function importStudents(rows: ParsedRow[]): Promise<ImportResult> {
     return {
         imported: resp.importados,
         rejected: resp.rechazados,
-        errors:   resp.errores.map((e) => ({ row: e.fila, reason: e.razon })),
+        total:    resp.total,
+        errors:   resp.errores.map((e) => ({ row: e.fila, carnetId: e.carnet_id, reason: e.razon })),
     };
 }
 
@@ -154,10 +175,15 @@ export async function downloadTemplate(): Promise<void> {
 export async function getRecentUploads(): Promise<UploadItem[]> {
     const rows = await apiFetch<BackendUpload[]>('/uploads');
     return rows.map((r) => ({
-        id: r.id,
-        filename: r.filename,
-        type: r.type,
-        status: r.status,
+        id:         r.id,
+        filename:   r.filename,
+        type:       r.type,
+        status:     r.status,
+        imported:   r.imported  ?? 0,
+        rejected:   r.rejected  ?? 0,
+        total:      r.total_rows ?? (r.imported ?? 0) + (r.rejected ?? 0),
+        errors:     Array.isArray(r.errors) ? r.errors : [],
+        uploadedBy: r.uploaded_by ?? '',
         uploadedAt: new Date(r.created_at).toLocaleString('es-GT', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit',

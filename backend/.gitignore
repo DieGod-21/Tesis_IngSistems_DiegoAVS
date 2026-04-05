@@ -1,2 +1,7 @@
 node_modules/
 .env
+
+migration_fixes.sql
+
+scripts/
+generar_template_excel.js

@@ -5,7 +5,7 @@ const { getPhaseById, getPhaseByName, getAllPhases } = require('../utils/phaseCa
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const normalize = (str) => str?.trim().replace(/\s+/g, ' ') ?? '';
+const normalize = (str) => str?.trim().replace(/\s+/g, ' ').replace(/\*/g, '').trim() ?? '';
 
 /**
  * Convierte el campo "approved" al booleano correspondiente.
@@ -18,6 +18,30 @@ function parseApproved(val) {
         if (v === 'aprobado' || v === 'true') return true;
     }
     return false;
+}
+
+/**
+ * Convierte errores de PostgreSQL y de validación propia en mensajes comprensibles
+ * para el usuario final (no técnico).
+ */
+function friendlyError(err) {
+    // Errores de BD (pg)
+    if (err.code) {
+        if (err.code === '23505') {
+            if (err.constraint?.includes('carnet')) return 'El carnet ya está registrado en la base de datos';
+            if (err.constraint?.includes('correo')) return 'El correo institucional ya está en uso';
+            return 'Registro duplicado';
+        }
+        if (err.code === '23514') {
+            if (err.constraint?.includes('correo_institucional'))
+                return 'Correo inválido: debe terminar en @miumg.edu.gt o @umg.edu.gt';
+            return `Valor fuera de rango permitido (${err.constraint})`;
+        }
+        if (err.code === '23502') return 'Campo obligatorio vacío';
+        if (err.code === '23503') return 'Referencia inválida (fase o semestre no existe)';
+        return `Error de base de datos: ${err.message}`;
+    }
+    return err.message ?? 'Error desconocido';
 }
 
 /**
@@ -278,8 +302,18 @@ const bulkCreate = async (req, res, next) => {
 
         const created_by = req.user.user_id;
 
+        // Semestre por defecto: el más reciente del sistema
+        const { rows: semRows } = await pool.query(
+            'SELECT id, nombre FROM semesters ORDER BY anio DESC, numero DESC LIMIT 1'
+        );
+        if (!semRows.length) {
+            return res.status(400).json({
+                error: 'No existe ningún semestre en el sistema. Crea al menos un semestre antes de importar estudiantes.',
+            });
+        }
+        const defaultSemesterId = semRows[0].id;
+
         const allPhases   = getAllPhases();
-        // Lookup case-insensitive por nombre de fase
         const phaseByName = new Map(allPhases.map((p) => [p.name.toLowerCase(), p]));
 
         const carnetsCargaActual = new Set();
@@ -302,6 +336,7 @@ const bulkCreate = async (req, res, next) => {
                     phase,
                     fase_academica,
                     academic_phase_id,
+                    email,
                     correo_institucional,
                     semester_id,
                     approved: rawApproved = false,
@@ -309,7 +344,7 @@ const bulkCreate = async (req, res, next) => {
 
                 const nc  = normalize(full_name ?? nombre_completo);
                 const cid = normalize(carnet_id);
-                const co  = normalize(correo_institucional);
+                const co  = normalize(email ?? correo_institucional);
 
                 // Ignorar filas completamente vacías
                 if (!nc && !cid) continue;
@@ -354,19 +389,14 @@ const bulkCreate = async (req, res, next) => {
                             fase_academica, semester_id, approved, created_by,
                             academic_phase_id, created_at, updated_at)
                          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
-                        [nc, cid, co || null, phaseName, semester_id ?? null, approvedBool, created_by, phaseId]
+                        [nc, cid, co || null, phaseName, semester_id ?? defaultSemesterId, approvedBool, created_by, phaseId]
                     );
                     await client.query(`RELEASE SAVEPOINT ${sp}`);
                     importados++;
                 } catch (dbErr) {
                     await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
                     await client.query(`RELEASE SAVEPOINT ${sp}`);
-                    const esUnico = dbErr.code === '23505';
-                    errores.push({
-                        fila: numFila,
-                        carnet_id: cid,
-                        razon: esUnico ? 'El carnet ya existe en la base de datos' : `Error de base de datos: ${dbErr.message}`,
-                    });
+                    errores.push({ fila: numFila, carnet_id: cid, razon: friendlyError(dbErr) });
                 }
             }
 
@@ -381,12 +411,14 @@ const bulkCreate = async (req, res, next) => {
         const rechazados = errores.length;
 
         try {
-            const filename = `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`;
-            const status   = rechazados === filas.length ? 'error' : 'success';
+            const filename   = `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            const status     = importados === 0 ? 'error' : 'success';
+            const rechazados = errores.length;
             await pool.query(
-                `INSERT INTO upload_history (filename, type, status, imported, rejected, created_by)
-                 VALUES ($1, 'excel', $2, $3, $4, $5)`,
-                [filename, status, importados, rechazados, created_by]
+                `INSERT INTO upload_history
+                   (filename, type, status, imported, rejected, total_rows, errors, created_by)
+                 VALUES ($1, 'excel', $2, $3, $4, $5, $6::jsonb, $7)`,
+                [filename, status, importados, rechazados, filas.length, JSON.stringify(errores), created_by]
             );
         } catch { /* no bloquear respuesta si falla el historial */ }
 
@@ -405,10 +437,11 @@ const downloadTemplate = async (_req, res, next) => {
         const ws = wb.addWorksheet('Students', { views: [{ state: 'frozen', ySplit: 1 }] });
 
         ws.columns = [
-            { header: 'Full Name *',      key: 'fullName',       width: 35 },
-            { header: 'Carnet ID *',      key: 'carnetId',       width: 18 },
-            { header: 'Academic Phase *', key: 'academicPhase',  width: 22 },
-            { header: 'Approved',         key: 'approved',       width: 14 },
+            { header: 'Full Name *',       key: 'fullName',       width: 35 },
+            { header: 'Carnet ID *',       key: 'carnetId',       width: 18 },
+            { header: 'Email (optional)',  key: 'email',          width: 30 },
+            { header: 'Academic Phase *',  key: 'academicPhase',  width: 22 },
+            { header: 'Status *',          key: 'status',         width: 14 },
         ];
 
         ws.getRow(1).eachCell((cell) => {
@@ -419,14 +452,14 @@ const downloadTemplate = async (_req, res, next) => {
         ws.getRow(1).height = 24;
 
         if (phases.length >= 3) {
-            ws.addRow(['María Alejandra López Sánchez', '2021-00123', phases[0].name, 'desaprobado']);
-            ws.addRow(['Juan Carlos Pérez García',      '2019-00456', phases[1].name, 'desaprobado']);
-            ws.addRow(['Ana Beatriz Morales Cifuentes', '2020-00789', phases[2].name, 'aprobado']);
+            ws.addRow(['María Alejandra López Sánchez', '2021-00123', 'maria.lopez@miumg.edu.gt', phases[0].name, 'desaprobado']);
+            ws.addRow(['Juan Carlos Pérez García',      '2019-00456', '',                         phases[1].name, 'desaprobado']);
+            ws.addRow(['Ana Beatriz Morales Cifuentes', '2020-00789', 'ana.morales@umg.edu.gt',   phases[2].name, 'aprobado']);
         } else if (phases.length > 0) {
-            ws.addRow(['María Alejandra López Sánchez', '2021-00123', phases[0].name, 'desaprobado']);
+            ws.addRow(['María Alejandra López Sánchez', '2021-00123', '', phases[0].name, 'desaprobado']);
         }
 
-        ws.dataValidations.add('C2:C1048576', {
+        ws.dataValidations.add('D2:D1048576', {
             type: 'list',
             allowBlank: false,
             formulae: [`"${phaseFormulae}"`],
@@ -435,14 +468,26 @@ const downloadTemplate = async (_req, res, next) => {
             error: `Debe ser: ${phaseFormulae}`,
         });
 
-        ws.dataValidations.add('D2:D1048576', {
+        ws.dataValidations.add('E2:E1048576', {
             type: 'list',
-            allowBlank: true,
+            allowBlank: false,
             formulae: ['"aprobado,desaprobado"'],
             showErrorMessage: true,
             errorTitle: 'Valor inválido',
             error: 'Solo se acepta "aprobado" o "desaprobado"',
         });
+
+        // ── Hoja 2: Valid Phases ──────────────────────────────────────
+        const wsPhases = wb.addWorksheet('Valid Phases');
+        wsPhases.columns = [
+            { header: 'Value (Academic Phase)', key: 'value', width: 25 },
+            { header: 'Full Name',              key: 'name',  width: 40 },
+        ];
+        wsPhases.getRow(1).eachCell((c) => {
+            c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+        });
+        phases.forEach((p) => wsPhases.addRow([p.name, p.description || p.name]));
 
         const buffer = await wb.xlsx.writeBuffer();
         res.setHeader('Content-Disposition', 'attachment; filename="plantilla_estudiantes.xlsx"');

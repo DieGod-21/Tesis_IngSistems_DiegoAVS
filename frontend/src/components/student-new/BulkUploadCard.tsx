@@ -8,14 +8,13 @@
  * onUploaded() notifica al padre para refrescar RecentUploads.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X, Download } from 'lucide-react';
+import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, XCircle, X, Download } from 'lucide-react';
 import { importStudents, uploadPdf, downloadTemplate } from '../../services/studentsService';
 import type { ImportResult, ParsedRow } from '../../services/studentsService';
 
 const ACCEPTED_TYPES = '.xlsx,.xls,.csv,.pdf';
-const MAX_PREVIEW_ROWS = 20;
 const PDF_TYPES = ['application/pdf'];
 const EXCEL_TYPES = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -54,6 +53,29 @@ function isExcel(file: File): boolean {
     return EXCEL_TYPES.includes(file.type) || /\.(xlsx?|csv)$/i.test(file.name);
 }
 
+function norm(val: unknown): string {
+    return String(val ?? '').trim().replace(/\s+/g, ' ').replace(/\*/g, '').trim();
+}
+
+/** Busca un campo en la fila probando múltiples nombres de columna posibles */
+function pick(row: Record<string, unknown>, ...keys: string[]): string {
+    for (const k of keys) {
+        const val = row[k];
+        if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
+    }
+    // Búsqueda tolerante: ignora asteriscos y espacios extra en los headers del archivo
+    const rowKeys = Object.keys(row);
+    for (const k of keys) {
+        const kNorm = k.replace(/\*/g, '').trim().toLowerCase();
+        const match = rowKeys.find((rk) => rk.replace(/\*/g, '').trim().toLowerCase() === kNorm);
+        if (match !== undefined) {
+            const val = row[match];
+            if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
+        }
+    }
+    return '';
+}
+
 async function parseExcel(file: File): Promise<ParsedRow[]> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -62,18 +84,18 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
                 const data = e.target?.result;
                 const wb = XLSX.read(data, { type: 'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
-                const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+                const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '', raw: false });
                 const rows: ParsedRow[] = json.map((row, i) => ({
                     rowIndex: i + 2,
-                    // Nuevas columnas en inglés + compatibilidad con nombres anteriores
-                    fullName:      String(row['Full Name']      ?? row['nombreCompleto'] ?? row['nombre_completo'] ?? ''),
-                    carnetId:      String(row['Carnet ID']      ?? row['carnetId']       ?? row['carnet_id']       ?? ''),
-                    academicPhase: String(row['Academic Phase'] ?? row['faseAcademica']  ?? row['fase_academica']  ?? ''),
-                    approved:      String(row['Approved']       ?? row['aprobado']       ?? ''),
+                    fullName:      pick(row, 'Full Name *', 'Full Name', 'nombreCompleto', 'nombre_completo'),
+                    carnetId:      pick(row, 'Carnet ID *', 'Carnet ID', 'carnetId', 'carnet_id'),
+                    email:         pick(row, 'Email (optional)', 'correoInstitucional', 'correo_institucional'),
+                    academicPhase: pick(row, 'Academic Phase *', 'Academic Phase', 'faseAcademica', 'fase_academica'),
+                    approved:      pick(row, 'Status *', 'Status', 'Approved', 'aprobado'),
                     ...row,
                 }));
                 // Filtrar filas completamente vacías
-                resolve(rows.filter((r) => r.fullName?.trim() || r.carnetId?.trim()));
+                resolve(rows.filter((r) => norm(r.fullName) || norm(r.carnetId)));
             } catch (err) {
                 reject(err);
             }
@@ -83,12 +105,41 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
     });
 }
 
+// Claves internas del ParsedRow y nombres conocidos de columnas Excel
+// que NO deben aparecer como columnas extra en el preview.
+const KNOWN_KEYS = new Set([
+    'rowIndex', 'fullName', 'carnetId', 'email', 'academicPhase', 'approved',
+    'Full Name *', 'Full Name', 'nombreCompleto', 'nombre_completo',
+    'Carnet ID *', 'Carnet ID', 'carnet_id',
+    'Email (optional)', 'correoInstitucional', 'correo_institucional',
+    'Academic Phase *', 'Academic Phase', 'faseAcademica', 'fase_academica',
+    'Status *', 'Status', 'Approved', 'aprobado',
+]);
+
+/** Celda de Estado: refleja el valor real del campo "Status" del Excel. */
+function StatusCell({ value }: { value: string | boolean | undefined }) {
+    const v = String(value ?? '').trim().toLowerCase();
+    if (v === 'aprobado' || v === 'true') {
+        return <span className="sn-status-badge sn-status-badge--ok"><CheckCircle2 size={12} />Aprobado</span>;
+    }
+    if (v === 'desaprobado' || v === 'false') {
+        return <span className="sn-status-badge sn-status-badge--ko"><XCircle size={12} />Desaprobado</span>;
+    }
+    return <span className="sn-status-badge sn-status-badge--warn"><AlertCircle size={12} />{value ? String(value) : 'sin valor'}</span>;
+}
+
 // ─── Componente ─────────────────────────────────────────────────────
 
 const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
     const [state, setState] = useState<UploadState>({ status: 'idle' });
     const fileInputRef      = useRef<HTMLInputElement>(null);
     const selectedFileRef   = useRef<File | null>(null);
+
+    // Columnas extra que el Excel pueda traer más allá de las 5 conocidas
+    const extraCols = useMemo<string[]>(() => {
+        if (state.status !== 'preview' || !state.rows.length) return [];
+        return Object.keys(state.rows[0]).filter((k) => !KNOWN_KEYS.has(k));
+    }, [state]);
 
     const handleFile = useCallback(async (file: File) => {
         selectedFileRef.current = file;
@@ -226,25 +277,26 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                             </button>
                         </div>
                         <p className="sn-preview__meta">
-                            {state.rows.length} fila{state.rows.length !== 1 ? 's' : ''} detectadas
-                            {state.rows.length > MAX_PREVIEW_ROWS
-                                ? ` — mostrando las primeras ${MAX_PREVIEW_ROWS}`
-                                : ''}
+                            <strong>{state.rows.length}</strong> estudiante{state.rows.length !== 1 ? 's' : ''} detectado{state.rows.length !== 1 ? 's' : ''} &mdash; todos visibles con scroll
                         </p>
 
                         <div className="sn-preview__table-wrap">
                             <table className="sn-preview__table">
                                 <thead>
                                     <tr>
-                                        <th className="sn-preview__th">Fila</th>
+                                        <th className="sn-preview__th sn-preview__th--num">#</th>
                                         <th className="sn-preview__th">Nombre</th>
                                         <th className="sn-preview__th">Carnet</th>
-                                        <th className="sn-preview__th">Fase</th>
+                                        <th className="sn-preview__th">Email</th>
+                                        <th className="sn-preview__th">Fase Académica</th>
                                         <th className="sn-preview__th">Estado</th>
+                                        {extraCols.map((col) => (
+                                            <th key={col} className="sn-preview__th sn-preview__th--extra">{col}</th>
+                                        ))}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {state.rows.slice(0, MAX_PREVIEW_ROWS).map((row) => {
+                                    {state.rows.map((row) => {
                                         const hasError = !row.carnetId?.trim() || !row.fullName?.trim();
                                         return (
                                             <tr
@@ -252,14 +304,20 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                                 className={`sn-preview__row${hasError ? ' sn-preview__row--error' : ''}`}
                                             >
                                                 <td className="sn-preview__td sn-preview__td--num">{row.rowIndex}</td>
-                                                <td className="sn-preview__td">{row.fullName || '—'}</td>
-                                                <td className="sn-preview__td">{row.carnetId || <span className="sn-preview__empty">vacío</span>}</td>
-                                                <td className="sn-preview__td">{row.academicPhase || '—'}</td>
-                                                <td className="sn-preview__td">
-                                                    {hasError
-                                                        ? <AlertCircle size={14} className="sn-preview__status-error" />
-                                                        : <CheckCircle2 size={14} className="sn-preview__status-ok" />}
+                                                <td className="sn-preview__td">{row.fullName || <span className="sn-preview__empty">vacío</span>}</td>
+                                                <td className="sn-preview__td sn-preview__td--mono">{row.carnetId || <span className="sn-preview__empty">vacío</span>}</td>
+                                                <td className="sn-preview__td sn-preview__td--email">{row.email?.trim() ? row.email : <span className="sn-preview__empty">—</span>}</td>
+                                                <td className="sn-preview__td">{row.academicPhase || <span className="sn-preview__empty">—</span>}</td>
+                                                <td className="sn-preview__td sn-preview__td--status">
+                                                    <StatusCell value={row.approved} />
                                                 </td>
+                                                {extraCols.map((col) => (
+                                                    <td key={col} className="sn-preview__td sn-preview__td--extra">
+                                                        {row[col] != null && String(row[col]).trim() !== ''
+                                                            ? String(row[col])
+                                                            : <span className="sn-preview__empty">—</span>}
+                                                    </td>
+                                                ))}
                                             </tr>
                                         );
                                     })}
@@ -272,7 +330,7 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                 className="sn-btn-primary"
                                 onClick={handleImport}
                             >
-                                Importar {state.rows.length} Registros
+                                Importar {state.rows.length} Registro{state.rows.length !== 1 ? 's' : ''}
                             </button>
                             <button type="button" className="sn-btn-ghost" onClick={handleReset}>
                                 Cancelar
@@ -305,21 +363,38 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
 
                 {/* ── Success Excel ─────────────────────────────────────── */}
                 {state.status === 'success' && (
-                    <div className="sn-result sn-result--success">
-                        <CheckCircle2 size={28} className="sn-result__icon" />
-                        <p className="sn-result__title">Importación completada</p>
-                        <p className="sn-result__detail">
-                            {state.result.imported} importados — {state.result.rejected} rechazados
+                    <div className={`sn-result ${state.result.rejected === state.result.total ? 'sn-result--error' : 'sn-result--success'}`}>
+                        {state.result.rejected === state.result.total
+                            ? <AlertCircle size={28} className="sn-result__icon" />
+                            : <CheckCircle2 size={28} className="sn-result__icon" />}
+                        <p className="sn-result__title">
+                            {state.result.rejected === state.result.total
+                                ? 'Ningún registro importado'
+                                : 'Importación completada'}
                         </p>
+                        <div className="sn-result__stats">
+                            <span className="sn-result__stat sn-result__stat--ok">
+                                <CheckCircle2 size={13} /> {state.result.imported} importados
+                            </span>
+                            {state.result.rejected > 0 && (
+                                <span className="sn-result__stat sn-result__stat--ko">
+                                    <XCircle size={13} /> {state.result.rejected} rechazados
+                                </span>
+                            )}
+                        </div>
                         {state.result.errors.length > 0 && (
-                            <ul className="sn-result__errors">
-                                {state.result.errors.slice(0, 5).map((e) => (
-                                    <li key={e.row}>Fila {e.row}: {e.reason}</li>
-                                ))}
-                                {state.result.errors.length > 5 && (
-                                    <li>…y {state.result.errors.length - 5} más</li>
-                                )}
-                            </ul>
+                            <div className="sn-result__errors-wrap">
+                                <p className="sn-result__errors-title">Filas con error:</p>
+                                <ul className="sn-result__errors">
+                                    {state.result.errors.map((e) => (
+                                        <li key={`${e.row}-${e.carnetId}`}>
+                                            <span className="sn-result__err-row">Fila {e.row}</span>
+                                            {e.carnetId && <span className="sn-result__err-carnet">{e.carnetId}</span>}
+                                            <span className="sn-result__err-reason">{e.reason}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         )}
                         <button type="button" className="sn-btn-ghost" onClick={handleReset}>Nueva Carga</button>
                     </div>
@@ -352,9 +427,9 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         <div>
                             <p className="sn-info-block__title">Columnas del archivo Excel</p>
                             <p className="sn-info-block__body">
-                                Columnas requeridas: <code>Full Name</code>, <code>Carnet ID</code>,{' '}
-                                <code>Academic Phase</code>. Opcional: <code>Approved</code>{' '}
-                                ("aprobado" o "desaprobado").
+                                Requeridas: <code>Full Name</code>, <code>Carnet ID</code>,{' '}
+                                <code>Academic Phase</code>, <code>Status</code> ("aprobado"/"desaprobado").{' '}
+                                Opcional: <code>Email (optional)</code>.
                             </p>
                         </div>
                     </div>
