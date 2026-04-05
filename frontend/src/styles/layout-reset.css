@@ -59,6 +59,7 @@ ion-content {
 
 ion-content::part(scroll) {
     overflow-y: auto;
+    overflow-x: auto;
     /* momentum scroll en iOS */
     -webkit-overflow-scrolling: touch;
     /* impide que el scroll se "escape" al contenedor padre */

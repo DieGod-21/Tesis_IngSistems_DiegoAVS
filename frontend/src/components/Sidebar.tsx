@@ -17,6 +17,7 @@ import {
     Users,
     Briefcase,
     CalendarDays,
+    GraduationCap,
     Settings,
     LogOut,
 } from 'lucide-react';
@@ -36,21 +37,24 @@ interface NavItem {
     icon: React.ReactNode;
     exact?: boolean;
     disabled?: boolean;
+    adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-    { label: 'Inicio',               to: '/dashboard',   icon: <Home size={20} />,        exact: true },
-    { label: 'Nuevo Registro',       to: '/students/new',icon: <UserPlus size={20} />,     exact: true },
-    { label: 'Estudiantes',          to: '/students',    icon: <Users size={20} />,        exact: true },
-    { label: 'Proyectos',            to: '/projects',    icon: <Briefcase size={20} />,    disabled: true },
-    { label: 'Calendario Académico', to: '/calendar',    icon: <CalendarDays size={20} />, exact: true },
+    { label: 'Inicio',               to: '/dashboard',        icon: <Home size={20} />,           exact: true },
+    { label: 'Nuevo Registro',       to: '/students/new',     icon: <UserPlus size={20} />,        exact: true },
+    { label: 'Estudiantes',          to: '/students',         icon: <Users size={20} />,           exact: true },
+    { label: 'Proyectos',            to: '/projects',         icon: <Briefcase size={20} />,       disabled: true },
+    { label: 'Calendario Académico', to: '/calendar',         icon: <CalendarDays size={20} />,    exact: true },
+    { label: 'Fases Académicas',     to: '/academic-phases',  icon: <GraduationCap size={20} />,   exact: true, adminOnly: true },
 ];
 
 // ─── Componente ──────────────────────────────────────────────────────
 
 const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
     const history = useHistory();
+    const isAdmin = user?.role === 'admin';
 
     const handleLogout = async () => {
         await logout();
@@ -85,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
 
                 {/* Navegación principal */}
                 <nav className="dash-sidebar__nav" aria-label="Navegación principal">
-                    {NAV_ITEMS.map((item) =>
+                    {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) =>
                         item.disabled ? (
                             <span
                                 key={item.label}

@@ -206,11 +206,13 @@
     border: 1px solid var(--dash-border);
     border-radius: 12px;
     box-shadow: var(--dash-shadow-sm);
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .sl-table {
     width: 100%;
+    min-width: 640px;
     border-collapse: collapse;
     font-size: 0.85rem;
 }
@@ -402,6 +404,18 @@
     }
 }
 
+@media (max-width: 768px) {
+    .sl-page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .sl-page-header .sn-btn-primary {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
 @media (max-width: 640px) {
     .sl-body {
         padding: 16px;
@@ -411,12 +425,28 @@
         grid-template-columns: 1fr 1fr;
     }
 
-    .sl-table-wrap {
-        overflow-x: auto;
+    .sl-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
     }
 
-    .sl-table {
-        min-width: 680px;
+    .sl-filter-search {
+        min-width: 0;
+    }
+
+    .sl-status-tabs {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .sl-filter-count {
+        margin-left: 0;
+        text-align: right;
+    }
+
+    .sl-student-name {
+        max-width: 140px;
     }
 }
 

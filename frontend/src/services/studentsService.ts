@@ -35,10 +35,13 @@ export interface StudentPayload {
 /** Una fila parseada de un archivo Excel/CSV */
 export interface ParsedRow {
     rowIndex: number;
-    nombreCompleto?: string;
+    /** Nombre completo del estudiante (columna "Full Name") */
+    fullName?: string;
     carnetId?: string;
-    correoInstitucional?: string;
-    semestreLectivo?: string;
+    /** Nombre de la fase académica (columna "Academic Phase") */
+    academicPhase?: string;
+    /** Valor de aprobación: "aprobado" | "desaprobado" | boolean */
+    approved?: string | boolean;
     [key: string]: unknown;
 }
 
@@ -105,21 +108,15 @@ interface BackendUpload {
 }
 
 /**
- * Importa filas desde Excel/CSV usando POST /api/students/bulk.
- * Acepta defaultPhaseId para asignar la misma fase a todas las filas.
+ * Importa filas desde Excel usando POST /api/students/bulk.
+ * Cada fila puede traer su propia fase académica y estado de aprobación.
  */
-export async function importStudents(
-    rows: ParsedRow[],
-    semesterId?: string,
-    defaultPhaseId?: number,
-): Promise<ImportResult> {
+export async function importStudents(rows: ParsedRow[]): Promise<ImportResult> {
     const filas = rows.map((row) => ({
-        nombre_completo:      (row.nombreCompleto ?? '').trim(),
-        carnet_id:            (row.carnetId ?? '').trim(),
-        correo_institucional: (row.correoInstitucional ?? '').trim(),
-        academic_phase_id:    defaultPhaseId,
-        semester_id:          semesterId ?? (row.semestreLectivo ?? '').trim(),
-        approved:             false,
+        full_name: (row.fullName  ?? '').trim(),
+        carnet_id: (row.carnetId  ?? '').trim(),
+        phase:     (row.academicPhase ?? '').trim(),
+        approved:  row.approved,
     }));
 
     const resp = await apiFetch<BulkResponse>('/students/bulk', {

@@ -603,6 +603,8 @@
     border-radius: 12px;
     box-shadow: var(--dash-shadow-sm);
     overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .dash-table-card__header {
@@ -638,6 +640,7 @@
 
 .dash-table {
     width: 100%;
+    min-width: 560px;
     border-collapse: collapse;
     text-align: left;
 }
@@ -1001,6 +1004,23 @@
 
     .dash-header__profile-info {
         display: none;
+    }
+
+    .dash-body {
+        padding: 12px;
+    }
+
+    .dash-content-grid {
+        gap: 16px;
+    }
+
+    .dash-quick-row {
+        gap: 16px;
+    }
+
+    .dash-btn-primary {
+        width: 100%;
+        justify-content: center;
     }
 }
 

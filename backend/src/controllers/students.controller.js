@@ -8,6 +8,19 @@ const { getPhaseById, getPhaseByName, getAllPhases } = require('../utils/phaseCa
 const normalize = (str) => str?.trim().replace(/\s+/g, ' ') ?? '';
 
 /**
+ * Convierte el campo "approved" al booleano correspondiente.
+ * Acepta: "aprobado" | "desaprobado" | "true" | "false" | boolean.
+ */
+function parseApproved(val) {
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') {
+        const v = val.trim().toLowerCase();
+        if (v === 'aprobado' || v === 'true') return true;
+    }
+    return false;
+}
+
+/**
  * Resuelve la fase académica a { phaseId, phaseName } desde el cache en memoria.
  * Acepta `academic_phase_id` (número) — vía relacional (preferido)
  *   o `fase_academica` (texto) — campo legado (@deprecated), por compatibilidad.
@@ -265,86 +278,104 @@ const bulkCreate = async (req, res, next) => {
 
         const created_by = req.user.user_id;
 
-        // Usar cache en lugar de consultar la BD por cada fila
-        const allPhases  = getAllPhases();
-        const phaseByName = new Map(allPhases.map((p) => [p.name, p]));
+        const allPhases   = getAllPhases();
+        // Lookup case-insensitive por nombre de fase
+        const phaseByName = new Map(allPhases.map((p) => [p.name.toLowerCase(), p]));
 
         const carnetsCargaActual = new Set();
         let importados = 0;
         const errores  = [];
 
-        for (let i = 0; i < filas.length; i++) {
-            const fila    = filas[i];
-            const numFila = i + 2;
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-            const {
-                nombre_completo,
-                carnet_id,
-                correo_institucional,
-                /** @deprecated usar academic_phase_id */
-                fase_academica,
-                academic_phase_id,
-                semester_id,
-                approved = false,
-            } = fila;
+            for (let i = 0; i < filas.length; i++) {
+                const fila    = filas[i];
+                const numFila = i + 2;
 
-            const nc  = normalize(nombre_completo);
-            const cid = normalize(carnet_id);
-            const co  = normalize(correo_institucional);
+                // Acepta formato nuevo (full_name / phase) y legado (nombre_completo / fase_academica)
+                const {
+                    full_name,
+                    nombre_completo,
+                    carnet_id,
+                    phase,
+                    fase_academica,
+                    academic_phase_id,
+                    correo_institucional,
+                    semester_id,
+                    approved: rawApproved = false,
+                } = fila;
 
-            // Validaciones
-            if (!nc)          { errores.push({ fila: numFila, carnet_id: cid || '', razon: 'nombre_completo es obligatorio' }); continue; }
-            if (nc.length > 150) { errores.push({ fila: numFila, carnet_id: cid, razon: 'nombre_completo excede 150 caracteres' }); continue; }
-            if (!cid)         { errores.push({ fila: numFila, carnet_id: '', razon: 'carnet_id es obligatorio' }); continue; }
-            if (cid.length > 50) { errores.push({ fila: numFila, carnet_id: cid, razon: 'carnet_id excede 50 caracteres' }); continue; }
-            if (!co)          { errores.push({ fila: numFila, carnet_id: cid, razon: 'correo_institucional es obligatorio' }); continue; }
-            if (co.length > 100) { errores.push({ fila: numFila, carnet_id: cid, razon: 'correo_institucional excede 100 caracteres' }); continue; }
-            if (!EMAIL_REGEX.test(co)) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Formato de correo institucional inválido' }); continue; }
-            if (!semester_id) { errores.push({ fila: numFila, carnet_id: cid, razon: 'semester_id es obligatorio' }); continue; }
+                const nc  = normalize(full_name ?? nombre_completo);
+                const cid = normalize(carnet_id);
+                const co  = normalize(correo_institucional);
 
-            // Resolución de fase desde cache
-            let phaseId   = null;
-            let phaseName = null;
+                // Ignorar filas completamente vacías
+                if (!nc && !cid) continue;
 
-            if (academic_phase_id != null) {
-                const phase = getPhaseById(academic_phase_id);
-                if (!phase) { errores.push({ fila: numFila, carnet_id: cid, razon: `academic_phase_id ${academic_phase_id} no existe` }); continue; }
-                phaseId   = phase.id;
-                phaseName = phase.name;
-            } else if (fase_academica) {
-                const phase = phaseByName.get(fase_academica);
-                if (!phase) { errores.push({ fila: numFila, carnet_id: cid, razon: `fase_academica inválida: "${fase_academica}"` }); continue; }
-                phaseId   = phase.id;
-                phaseName = phase.name;
-            } else {
-                errores.push({ fila: numFila, carnet_id: cid, razon: 'Se requiere academic_phase_id o fase_academica' }); continue;
+                // Validaciones
+                if (!nc)  { errores.push({ fila: numFila, carnet_id: cid || '', razon: 'Nombre completo es obligatorio' }); continue; }
+                if (nc.length > 150) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Nombre completo excede 150 caracteres' }); continue; }
+                if (!cid) { errores.push({ fila: numFila, carnet_id: '', razon: 'Carnet ID es obligatorio' }); continue; }
+                if (cid.length > 50) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Carnet ID excede 50 caracteres' }); continue; }
+                if (co && !EMAIL_REGEX.test(co)) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Formato de correo inválido' }); continue; }
+
+                // Resolución de fase desde cache
+                let phaseId   = null;
+                let phaseName = null;
+
+                if (academic_phase_id != null) {
+                    const p = getPhaseById(academic_phase_id);
+                    if (!p) { errores.push({ fila: numFila, carnet_id: cid, razon: `academic_phase_id ${academic_phase_id} no existe` }); continue; }
+                    phaseId = p.id; phaseName = p.name;
+                } else {
+                    const phaseKey = normalize(phase ?? fase_academica).toLowerCase();
+                    if (!phaseKey) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Fase académica es obligatoria' }); continue; }
+                    const p = phaseByName.get(phaseKey);
+                    if (!p) { errores.push({ fila: numFila, carnet_id: cid, razon: `Fase académica inválida: "${phaseKey}"` }); continue; }
+                    phaseId = p.id; phaseName = p.name;
+                }
+
+                // Duplicado en esta carga
+                const carnetNorm = cid.toLowerCase();
+                if (carnetsCargaActual.has(carnetNorm)) {
+                    errores.push({ fila: numFila, carnet_id: cid, razon: 'Carnet duplicado en esta carga' }); continue;
+                }
+                carnetsCargaActual.add(carnetNorm);
+
+                const approvedBool = parseApproved(rawApproved);
+                const sp = `sp_${i}`;
+                await client.query(`SAVEPOINT ${sp}`);
+                try {
+                    await client.query(
+                        `INSERT INTO students
+                           (id, nombre_completo, carnet_id, correo_institucional,
+                            fase_academica, semester_id, approved, created_by,
+                            academic_phase_id, created_at, updated_at)
+                         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+                        [nc, cid, co || null, phaseName, semester_id ?? null, approvedBool, created_by, phaseId]
+                    );
+                    await client.query(`RELEASE SAVEPOINT ${sp}`);
+                    importados++;
+                } catch (dbErr) {
+                    await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+                    await client.query(`RELEASE SAVEPOINT ${sp}`);
+                    const esUnico = dbErr.code === '23505';
+                    errores.push({
+                        fila: numFila,
+                        carnet_id: cid,
+                        razon: esUnico ? 'El carnet ya existe en la base de datos' : `Error de base de datos: ${dbErr.message}`,
+                    });
+                }
             }
 
-            // Duplicado en esta carga
-            const carnetNorm = cid.toLowerCase();
-            if (carnetsCargaActual.has(carnetNorm)) {
-                errores.push({ fila: numFila, carnet_id: cid, razon: 'Carnet duplicado en esta carga' }); continue;
-            }
-            carnetsCargaActual.add(carnetNorm);
-
-            try {
-                await pool.query(
-                    `INSERT INTO students
-                       (id, nombre_completo, carnet_id, correo_institucional,
-                        fase_academica, semester_id, approved, created_by,
-                        academic_phase_id, created_at, updated_at)
-                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
-                    [nc, cid, co, phaseName, semester_id, Boolean(approved), created_by, phaseId]
-                );
-                importados++;
-            } catch (dbErr) {
-                const esUnico = dbErr.code === '23505';
-                errores.push({
-                    fila: numFila,
-                    carnet_id: cid,
-                    razon: esUnico ? 'El carnet ya existe en la base de datos' : `Error de base de datos: ${dbErr.message}`,
-                });
-            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
         }
 
         const rechazados = errores.length;
@@ -367,19 +398,17 @@ const bulkCreate = async (req, res, next) => {
 
 const downloadTemplate = async (_req, res, next) => {
     try {
-        // Usar cache en lugar de consultar la BD
         const phases = getAllPhases();
         const phaseFormulae = phases.map((p) => p.name).join(',');
 
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Estudiantes', { views: [{ state: 'frozen', ySplit: 1 }] });
+        const ws = wb.addWorksheet('Students', { views: [{ state: 'frozen', ySplit: 1 }] });
 
         ws.columns = [
-            { header: 'nombreCompleto *',      key: 'nombreCompleto',      width: 35 },
-            { header: 'carnetId *',            key: 'carnetId',            width: 18 },
-            { header: 'correoInstitucional *', key: 'correoInstitucional', width: 32 },
-            { header: 'faseAcademica *',       key: 'faseAcademica',       width: 22 },
-            { header: 'aprobado',              key: 'aprobado',            width: 12 },
+            { header: 'Full Name *',      key: 'fullName',       width: 35 },
+            { header: 'Carnet ID *',      key: 'carnetId',       width: 18 },
+            { header: 'Academic Phase *', key: 'academicPhase',  width: 22 },
+            { header: 'Approved',         key: 'approved',       width: 14 },
         ];
 
         ws.getRow(1).eachCell((cell) => {
@@ -390,18 +419,29 @@ const downloadTemplate = async (_req, res, next) => {
         ws.getRow(1).height = 24;
 
         if (phases.length >= 3) {
-            ws.addRow(['María Alejandra López Sánchez', '2021-00123', 'malopez@miumg.edu.gt', phases[0].name, 'false']);
-            ws.addRow(['Juan Carlos Pérez García',      '2019-00456', 'jcperez@miumg.edu.gt',  phases[1].name, 'false']);
-            ws.addRow(['Ana Beatriz Morales Cifuentes', '2020-00789', 'abmorales@miumg.edu.gt', phases[2].name, 'true']);
+            ws.addRow(['María Alejandra López Sánchez', '2021-00123', phases[0].name, 'desaprobado']);
+            ws.addRow(['Juan Carlos Pérez García',      '2019-00456', phases[1].name, 'desaprobado']);
+            ws.addRow(['Ana Beatriz Morales Cifuentes', '2020-00789', phases[2].name, 'aprobado']);
+        } else if (phases.length > 0) {
+            ws.addRow(['María Alejandra López Sánchez', '2021-00123', phases[0].name, 'desaprobado']);
         }
 
-        ws.dataValidations.add('D2:D1048576', {
+        ws.dataValidations.add('C2:C1048576', {
             type: 'list',
             allowBlank: false,
             formulae: [`"${phaseFormulae}"`],
             showErrorMessage: true,
             errorTitle: 'Fase inválida',
             error: `Debe ser: ${phaseFormulae}`,
+        });
+
+        ws.dataValidations.add('D2:D1048576', {
+            type: 'list',
+            allowBlank: true,
+            formulae: ['"aprobado,desaprobado"'],
+            showErrorMessage: true,
+            errorTitle: 'Valor inválido',
+            error: 'Solo se acepta "aprobado" o "desaprobado"',
         });
 
         const buffer = await wb.xlsx.writeBuffer();

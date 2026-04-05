@@ -6,3 +6,5 @@ CLAUDE.md
 Thumbs.db
 
 backend/src/db/migrations/
+
+template_estudiantes.xlsx

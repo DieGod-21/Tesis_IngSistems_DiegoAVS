@@ -47,7 +47,7 @@ async function generarTemplate() {
     });
 
     // ── Fila 1: título institucional ──────────────────────────────────
-    wsEstudiantes.mergeCells('A1:F1');
+    wsEstudiantes.mergeCells('A1:D1');
     const celdaTitulo = wsEstudiantes.getCell('A1');
     celdaTitulo.value = 'Universidad Mariano Gálvez — Sistema de Gestión de Proyectos de Graduación';
     celdaTitulo.font = { name: 'Calibri', size: 14, bold: true, color: { argb: BLANCO } };
@@ -57,12 +57,10 @@ async function generarTemplate() {
 
     // ── Fila 2: encabezados de columna ────────────────────────────────
     const columnas = [
-        { header: 'nombreCompleto *',      key: 'nombreCompleto',      width: 35 },
-        { header: 'carnetId *',            key: 'carnetId',            width: 18 },
-        { header: 'correoInstitucional *', key: 'correoInstitucional', width: 32 },
-        { header: 'faseAcademica *',       key: 'faseAcademica',       width: 22 },
-        { header: 'semestreLectivo',       key: 'semestreLectivo',     width: 28 },
-        { header: 'aprobado',              key: 'aprobado',            width: 14 },
+        { header: 'Full Name *',      key: 'fullName',      width: 35 },
+        { header: 'Carnet ID *',      key: 'carnetId',      width: 18 },
+        { header: 'Academic Phase *', key: 'academicPhase', width: 22 },
+        { header: 'Approved',         key: 'approved',      width: 14 },
     ];
 
     wsEstudiantes.columns = columnas;
@@ -84,37 +82,29 @@ async function generarTemplate() {
     // ── Filas de ejemplo ──────────────────────────────────────────────
     const ejemplos = [
         {
-            nombreCompleto:      'María Alejandra López Sánchez',
-            carnetId:            '2021-00123',
-            correoInstitucional: 'malopez@miumg.edu.gt',
-            faseAcademica:       'anteproyecto',
-            semestreLectivo:     'Primer Semestre 2026',
-            aprobado:            'false',
+            fullName:      'María Alejandra López Sánchez',
+            carnetId:      '2021-00123',
+            academicPhase: 'anteproyecto',
+            approved:      'desaprobado',
         },
         {
-            nombreCompleto:      'Juan Carlos Pérez García',
-            carnetId:            '2019-00456',
-            correoInstitucional: 'jcperez@miumg.edu.gt',
-            faseAcademica:       'tesis',
-            semestreLectivo:     'Primer Semestre 2026',
-            aprobado:            'false',
+            fullName:      'Juan Carlos Pérez García',
+            carnetId:      '2019-00456',
+            academicPhase: 'tesis',
+            approved:      'desaprobado',
         },
         {
-            nombreCompleto:      'Ana Beatriz Morales Cifuentes',
-            carnetId:            '2020-00789',
-            correoInstitucional: 'abmorales@miumg.edu.gt',
-            faseAcademica:       'eps',
-            semestreLectivo:     'Primer Semestre 2026',
-            aprobado:            'true',
+            fullName:      'Ana Beatriz Morales Cifuentes',
+            carnetId:      '2020-00789',
+            academicPhase: 'eps',
+            approved:      'aprobado',
         },
         // Fila con error intencional — para ilustrar validación
         {
-            nombreCompleto:      '',
-            carnetId:            '2022-01010',
-            correoInstitucional: 'no-es-un-correo',
-            faseAcademica:       'posgrado',
-            semestreLectivo:     '',
-            aprobado:            '',
+            fullName:      '',
+            carnetId:      '2022-01010',
+            academicPhase: 'fase_invalida',
+            approved:      '',
         },
     ];
 
@@ -124,12 +114,10 @@ async function generarTemplate() {
         fila.height = 22;
 
         const valores = [
-            ej.nombreCompleto,
+            ej.fullName,
             ej.carnetId,
-            ej.correoInstitucional,
-            ej.faseAcademica,
-            ej.semestreLectivo,
-            ej.aprobado,
+            ej.academicPhase,
+            ej.approved,
         ];
 
         const esFilaError = idx === 3; // última fila tiene errores intencionales
@@ -149,7 +137,7 @@ async function generarTemplate() {
     });
 
     // Nota sobre la fila de error
-    wsEstudiantes.mergeCells('A7:F7');
+    wsEstudiantes.mergeCells('A7:D7');
     const celdaNota = wsEstudiantes.getCell('A7');
     celdaNota.value = '⚠ Fila 6 contiene errores intencionales para ilustrar la validación. El backend rechazará filas inválidas e informará el motivo.';
     celdaNota.font = { name: 'Calibri', size: 10, italic: true, color: { argb: AMARILLO } };
@@ -158,7 +146,7 @@ async function generarTemplate() {
     wsEstudiantes.getRow(7).height = 20;
 
     // Separador visual
-    wsEstudiantes.mergeCells('A8:F8');
+    wsEstudiantes.mergeCells('A8:D8');
     const celdaSep = wsEstudiantes.getCell('A8');
     celdaSep.value = '↓  Agrega tus datos a partir de aquí (fila 9)  ↓';
     celdaSep.font = { name: 'Calibri', size: 10, bold: true, color: { argb: BLANCO } };
@@ -166,8 +154,8 @@ async function generarTemplate() {
     celdaSep.alignment = { horizontal: 'center', vertical: 'middle' };
     wsEstudiantes.getRow(8).height = 20;
 
-    // ── Validación de datos en columna faseAcademica (D) ─────────────
-    wsEstudiantes.dataValidations.add('D9:D1048576', {
+    // ── Validación de Academic Phase (C) ─────────────────────────────
+    wsEstudiantes.dataValidations.add('C9:C1048576', {
         type: 'list',
         allowBlank: false,
         formulae: ['"anteproyecto,tesis,eps"'],
@@ -177,14 +165,14 @@ async function generarTemplate() {
         showDropDown: false,
     });
 
-    // ── Validación de aprobado (F) ────────────────────────────────────
-    wsEstudiantes.dataValidations.add('F9:F1048576', {
+    // ── Validación de Approved (D) ────────────────────────────────────
+    wsEstudiantes.dataValidations.add('D9:D1048576', {
         type: 'list',
         allowBlank: true,
-        formulae: ['"true,false"'],
+        formulae: ['"aprobado,desaprobado"'],
         showErrorMessage: true,
         errorTitle: 'Valor inválido',
-        error: 'Solo se acepta "true" o "false"',
+        error: 'Solo se acepta "aprobado" o "desaprobado"',
     });
 
     // ═══════════════════════════════════════════════════════════════════
@@ -197,39 +185,36 @@ async function generarTemplate() {
         ['GUÍA DE USO — CARGA MASIVA DE ESTUDIANTES', '', '', ''],
         ['', '', '', ''],
         ['COLUMNAS OBLIGATORIAS (marcadas con *)', '', '', ''],
-        ['Columna', 'Nombre en Excel', 'Descripción', 'Ejemplo'],
-        ['A', 'nombreCompleto',      'Nombre completo del estudiante',                        'María Alejandra López Sánchez'],
-        ['B', 'carnetId',            'Número de carnet UMG (único)',                          '2021-00123'],
-        ['C', 'correoInstitucional', 'Correo @miumg.edu.gt o @umg.edu.gt',                   'malopez@miumg.edu.gt'],
-        ['D', 'faseAcademica',       'Fase: anteproyecto | tesis | eps  (ver Hoja 3)',        'tesis'],
+        ['Columna', 'Nombre en Excel',  'Descripción',                                      'Ejemplo'],
+        ['A',       'Full Name',        'Nombre completo del estudiante',                   'María Alejandra López Sánchez'],
+        ['B',       'Carnet ID',        'Número de carnet UMG (único)',                     '2021-00123'],
+        ['C',       'Academic Phase',   'Fase académica (ver Hoja Fases_Validas)',           'tesis'],
         ['', '', '', ''],
         ['COLUMNAS OPCIONALES', '', '', ''],
-        ['Columna', 'Nombre en Excel', 'Descripción', 'Valor por defecto'],
-        ['E', 'semestreLectivo', 'Nombre del semestre (debe coincidir con el sistema)',    '(vacío)'],
-        ['F', 'aprobado',        '"true" si el expediente está aprobado, "false" si no',  'false'],
+        ['Columna', 'Nombre en Excel', 'Descripción',                                       'Valor por defecto'],
+        ['D',       'Approved',        '"aprobado" si el expediente está aprobado, "desaprobado" si no', 'desaprobado'],
         ['', '', '', ''],
         ['REGLAS DE VALIDACIÓN', '', '', ''],
-        ['Regla', 'Descripción', '', ''],
-        ['Carnet único', 'No se puede repetir carnet_id en la misma carga ni en la BD', '', ''],
-        ['Correo válido', 'Debe tener formato email válido (se acepta cualquier dominio)', '', ''],
-        ['Fase requerida', 'Debe ser exactamente: anteproyecto, tesis o eps (minúsculas)', '', ''],
-        ['Nombre requerido', 'nombreCompleto no puede estar vacío', '', ''],
+        ['Regla',          'Descripción', '', ''],
+        ['Carnet único',   'No se puede repetir Carnet ID en la misma carga ni en la BD', '', ''],
+        ['Fase requerida', 'Debe coincidir con un valor válido en la columna C (menú desplegable)', '', ''],
+        ['Nombre requerido', 'Full Name no puede estar vacío', '', ''],
+        ['Aprobado',       'Solo acepta "aprobado" o "desaprobado". Vacío equivale a "desaprobado"', '', ''],
         ['', '', '', ''],
         ['PROCESO DE CARGA', '', '', ''],
         ['Paso', 'Acción', '', ''],
-        ['1', 'Completa este archivo a partir de la fila 9 de la hoja "Estudiantes"', '', ''],
+        ['1', 'Completa este archivo a partir de la fila 9 de la hoja "Students"', '', ''],
         ['2', 'Guarda el archivo como .xlsx (Excel 2007+)', '', ''],
         ['3', 'Ve a la sección "Registrar Estudiante" → "Carga Masiva" en el sistema', '', ''],
         ['4', 'Arrastra o selecciona el archivo', '', ''],
-        ['5', 'Revisa la vista previa (máx 20 filas)', '', ''],
-        ['6', 'Haz clic en "Importar X Registros"', '', ''],
-        ['7', 'El sistema mostrará cuántos se importaron y cuáles fueron rechazados', '', ''],
+        ['5', 'Revisa la vista previa y haz clic en "Importar X Registros"', '', ''],
+        ['6', 'El sistema mostrará cuántos se importaron y cuáles fueron rechazados', '', ''],
         ['', '', '', ''],
         ['RESULTADO DE LA CARGA', '', '', ''],
-        ['Campo', 'Descripción', '', ''],
-        ['importados', 'Cantidad de filas insertadas exitosamente', '', ''],
-        ['rechazados', 'Cantidad de filas que fallaron la validación', '', ''],
-        ['errores[]', 'Lista con fila, carnet y motivo del rechazo por cada fila fallida', '', ''],
+        ['Campo',       'Descripción', '', ''],
+        ['importados',  'Cantidad de filas insertadas exitosamente', '', ''],
+        ['rechazados',  'Cantidad de filas que fallaron la validación', '', ''],
+        ['errores[]',   'Lista con fila, carnet y motivo del rechazo por cada fila fallida', '', ''],
         ['', '', '', ''],
         ['SOPORTE', '', '', ''],
         ['Para dudas, comunícate con el administrador del sistema PG1-PG2.', '', '', ''],
@@ -276,13 +261,13 @@ async function generarTemplate() {
 
     const fasesData = [
         ['FASES ACADÉMICAS VÁLIDAS — Referencia del Sistema', '', ''],
-        ['Valor en Excel', 'Nombre completo', 'Descripción'],
+        ['Valor en Excel (Academic Phase)', 'Nombre completo', 'Descripción'],
         ['anteproyecto', 'Anteproyecto de Tesis', 'Estudiante en etapa de propuesta y aprobación del anteproyecto'],
         ['tesis', 'Tesis de Grado', 'Estudiante desarrollando su proyecto de tesis (PG1/PG2)'],
         ['eps', 'Ejercicio Profesional Supervisado', 'Estudiante en fase de práctica supervisada (EPS)'],
         ['', '', ''],
         ['IMPORTANTE: El valor debe escribirse exactamente como aparece en la columna "Valor en Excel".', '', ''],
-        ['La columna D de la hoja Estudiantes tiene un menú desplegable con las opciones válidas.', '', ''],
+        ['La columna C (Academic Phase) de la hoja Students tiene un menú desplegable con las opciones válidas.', '', ''],
     ];
 
     fasesData.forEach((row, rowIdx) => {

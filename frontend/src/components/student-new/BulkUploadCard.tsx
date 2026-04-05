@@ -8,14 +8,11 @@
  * onUploaded() notifica al padre para refrescar RecentUploads.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { CloudUpload, FileSpreadsheet, FileText, AlertCircle, CheckCircle2, X, Download } from 'lucide-react';
 import { importStudents, uploadPdf, downloadTemplate } from '../../services/studentsService';
 import type { ImportResult, ParsedRow } from '../../services/studentsService';
-import { getAcademicPhases } from '../../services/academicPhasesService';
-import type { AcademicPhase } from '../../services/academicPhasesService';
-import { isInstitutionalEmail } from '../../utils/validators';
 
 const ACCEPTED_TYPES = '.xlsx,.xls,.csv,.pdf';
 const MAX_PREVIEW_ROWS = 20;
@@ -66,15 +63,17 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
                 const wb = XLSX.read(data, { type: 'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-                const rows: ParsedRow[] = json.slice(0, MAX_PREVIEW_ROWS).map((row, i) => ({
+                const rows: ParsedRow[] = json.map((row, i) => ({
                     rowIndex: i + 2,
-                    nombreCompleto:      String(row['nombreCompleto']      ?? row['Nombre']  ?? row['nombre_completo'] ?? ''),
-                    carnetId:            String(row['carnetId']            ?? row['Carnet']  ?? row['carnet_id']       ?? ''),
-                    correoInstitucional: String(row['correoInstitucional'] ?? row['Correo']  ?? row['correo']          ?? ''),
-                    semestreLectivo:     String(row['semestreLectivo']     ?? row['Semestre'] ?? ''),
+                    // Nuevas columnas en inglés + compatibilidad con nombres anteriores
+                    fullName:      String(row['Full Name']      ?? row['nombreCompleto'] ?? row['nombre_completo'] ?? ''),
+                    carnetId:      String(row['Carnet ID']      ?? row['carnetId']       ?? row['carnet_id']       ?? ''),
+                    academicPhase: String(row['Academic Phase'] ?? row['faseAcademica']  ?? row['fase_academica']  ?? ''),
+                    approved:      String(row['Approved']       ?? row['aprobado']       ?? ''),
                     ...row,
                 }));
-                resolve(rows);
+                // Filtrar filas completamente vacías
+                resolve(rows.filter((r) => r.fullName?.trim() || r.carnetId?.trim()));
             } catch (err) {
                 reject(err);
             }
@@ -87,17 +86,9 @@ async function parseExcel(file: File): Promise<ParsedRow[]> {
 // ─── Componente ─────────────────────────────────────────────────────
 
 const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
-    const [state, setState]           = useState<UploadState>({ status: 'idle' });
-    const [phases, setPhases]         = useState<AcademicPhase[]>([]);
-    const [selectedPhaseId, setSelectedPhaseId] = useState<number | ''>('');
-    const fileInputRef                = useRef<HTMLInputElement>(null);
-    const selectedFileRef             = useRef<File | null>(null);
-
-    useEffect(() => {
-        getAcademicPhases()
-            .then(setPhases)
-            .catch(() => {});
-    }, []);
+    const [state, setState] = useState<UploadState>({ status: 'idle' });
+    const fileInputRef      = useRef<HTMLInputElement>(null);
+    const selectedFileRef   = useRef<File | null>(null);
 
     const handleFile = useCallback(async (file: File) => {
         selectedFileRef.current = file;
@@ -145,13 +136,9 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
 
     const handleImport = async () => {
         if (state.status === 'preview') {
-            if (!selectedPhaseId) {
-                setState({ status: 'error', message: 'Selecciona una fase académica antes de importar.' });
-                return;
-            }
             setState({ status: 'uploading' });
             try {
-                const result = await importStudents(state.rows, undefined, Number(selectedPhaseId));
+                const result = await importStudents(state.rows);
                 setState({ status: 'success', result });
                 onUploaded?.();
             } catch {
@@ -239,28 +226,11 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                             </button>
                         </div>
                         <p className="sn-preview__meta">
-                            {state.rows.length} fila{state.rows.length !== 1 ? 's' : ''} (máx. {MAX_PREVIEW_ROWS} mostradas)
+                            {state.rows.length} fila{state.rows.length !== 1 ? 's' : ''} detectadas
+                            {state.rows.length > MAX_PREVIEW_ROWS
+                                ? ` — mostrando las primeras ${MAX_PREVIEW_ROWS}`
+                                : ''}
                         </p>
-
-                        {/* Selector de fase — requerido para importar */}
-                        <div className="sn-preview__phase-select">
-                            <label htmlFor="bulk-phase" className="sn-form__label">
-                                Fase Académica <span className="sn-form__required">*</span>
-                            </label>
-                            <select
-                                id="bulk-phase"
-                                className="sn-field__input sn-field__select"
-                                value={selectedPhaseId}
-                                onChange={(e) => setSelectedPhaseId(e.target.value === '' ? '' : Number(e.target.value))}
-                            >
-                                <option value="">Seleccionar fase para todos los registros</option>
-                                {phases.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.description ?? p.name} ({p.name})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
 
                         <div className="sn-preview__table-wrap">
                             <table className="sn-preview__table">
@@ -269,24 +239,22 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                         <th className="sn-preview__th">Fila</th>
                                         <th className="sn-preview__th">Nombre</th>
                                         <th className="sn-preview__th">Carnet</th>
-                                        <th className="sn-preview__th">Correo</th>
+                                        <th className="sn-preview__th">Fase</th>
                                         <th className="sn-preview__th">Estado</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {state.rows.map((row) => {
-                                        const hasError =
-                                            !row.carnetId?.trim() ||
-                                            (!!row.correoInstitucional && !isInstitutionalEmail(row.correoInstitucional));
+                                    {state.rows.slice(0, MAX_PREVIEW_ROWS).map((row) => {
+                                        const hasError = !row.carnetId?.trim() || !row.fullName?.trim();
                                         return (
                                             <tr
                                                 key={row.rowIndex}
                                                 className={`sn-preview__row${hasError ? ' sn-preview__row--error' : ''}`}
                                             >
                                                 <td className="sn-preview__td sn-preview__td--num">{row.rowIndex}</td>
-                                                <td className="sn-preview__td">{row.nombreCompleto || '—'}</td>
+                                                <td className="sn-preview__td">{row.fullName || '—'}</td>
                                                 <td className="sn-preview__td">{row.carnetId || <span className="sn-preview__empty">vacío</span>}</td>
-                                                <td className="sn-preview__td sn-preview__td--email">{row.correoInstitucional || '—'}</td>
+                                                <td className="sn-preview__td">{row.academicPhase || '—'}</td>
                                                 <td className="sn-preview__td">
                                                     {hasError
                                                         ? <AlertCircle size={14} className="sn-preview__status-error" />
@@ -303,7 +271,6 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                                 type="button"
                                 className="sn-btn-primary"
                                 onClick={handleImport}
-                                disabled={!selectedPhaseId}
                             >
                                 Importar {state.rows.length} Registros
                             </button>
@@ -383,11 +350,11 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                     <div className="sn-info-block">
                         <AlertCircle size={16} className="sn-info-block__icon" />
                         <div>
-                            <p className="sn-info-block__title">Mapeo Automático de Datos</p>
+                            <p className="sn-info-block__title">Columnas del archivo Excel</p>
                             <p className="sn-info-block__body">
-                                El sistema identifica columnas por nombre: <code>nombreCompleto</code>,{' '}
-                                <code>carnetId</code>, <code>correoInstitucional</code>.
-                                La fase académica se selecciona antes de importar.
+                                Columnas requeridas: <code>Full Name</code>, <code>Carnet ID</code>,{' '}
+                                <code>Academic Phase</code>. Opcional: <code>Approved</code>{' '}
+                                ("aprobado" o "desaprobado").
                             </p>
                         </div>
                     </div>
