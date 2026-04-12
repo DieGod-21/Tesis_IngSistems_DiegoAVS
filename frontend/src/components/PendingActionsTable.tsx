@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { useHistory } from 'react-router-dom';
 import type { PendingAction } from '../services/dashboardService';
 
 interface PendingActionsTableProps {
@@ -15,13 +16,19 @@ interface PendingActionsTableProps {
 }
 
 const PendingActionsTable: React.FC<PendingActionsTableProps> = ({ actions }) => {
+    const history = useHistory();
+
     return (
         <section className="dash-table-card">
             <div className="dash-table-card__header">
                 <h4 className="dash-table-card__title">Acciones Pendientes</h4>
-                <a href="#" className="dash-table-card__link">
+                <button
+                    type="button"
+                    className="dash-table-card__link"
+                    onClick={() => history.push('/students')}
+                >
                     Ver todos
-                </a>
+                </button>
             </div>
 
             <div className="dash-table-wrapper">

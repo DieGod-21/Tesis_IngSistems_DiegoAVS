@@ -2,6 +2,7 @@ const pool = require('../db/pool');
 const ExcelJS = require('exceljs');
 const { EMAIL_REGEX } = require('../constants');
 const { getPhaseById, getPhaseByName, getAllPhases } = require('../utils/phaseCache');
+const { validateCarnet } = require('../utils/validateCarnet');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,8 @@ const create = async (req, res, next) => {
         }
         if (nc.length > 150)  return res.status(400).json({ error: 'nombre_completo no puede exceder 150 caracteres' });
         if (cid.length > 50)  return res.status(400).json({ error: 'carnet_id no puede exceder 50 caracteres' });
+        const carnetCheck = validateCarnet(cid);
+        if (!carnetCheck.valid) return res.status(400).json({ error: carnetCheck.message });
         if (!EMAIL_REGEX.test(co)) return res.status(400).json({ error: 'Formato de correo institucional inválido' });
         if (co.length > 100)  return res.status(400).json({ error: 'correo_institucional no puede exceder 100 caracteres' });
 
@@ -354,6 +357,8 @@ const bulkCreate = async (req, res, next) => {
                 if (nc.length > 150) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Nombre completo excede 150 caracteres' }); continue; }
                 if (!cid) { errores.push({ fila: numFila, carnet_id: '', razon: 'Carnet ID es obligatorio' }); continue; }
                 if (cid.length > 50) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Carnet ID excede 50 caracteres' }); continue; }
+                const carnetCheck = validateCarnet(cid);
+                if (!carnetCheck.valid) { errores.push({ fila: numFila, carnet_id: cid, razon: carnetCheck.message }); continue; }
                 if (co && !EMAIL_REGEX.test(co)) { errores.push({ fila: numFila, carnet_id: cid, razon: 'Formato de correo inválido' }); continue; }
 
                 // Resolución de fase desde cache

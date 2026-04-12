@@ -24,4 +24,18 @@ const getRecent = async (req, res, next) => {
   }
 };
 
-module.exports = { getRecent };
+const deleteUpload = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { rowCount } = await pool.query(
+            'DELETE FROM upload_history WHERE id = $1',
+            [id]
+        );
+        if (rowCount === 0) return res.status(404).json({ error: 'Registro no encontrado' });
+        res.json({ message: 'Registro eliminado' });
+    } catch (err) {
+        next(err);
+    }
+};
+
+module.exports = { getRecent, deleteUpload };

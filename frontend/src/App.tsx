@@ -3,6 +3,7 @@ import { IonApp, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import AppRouter from './routes/AppRouter';
 
 /* Core CSS required for Ionic components to work properly */
@@ -52,13 +53,15 @@ setupIonicReact();
  */
 const App: React.FC = () => (
   <IonApp>
-    <AuthProvider>
-      <ToastProvider>
-        <IonReactRouter>
-          <AppRouter />
-        </IonReactRouter>
-      </ToastProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <IonReactRouter>
+            <AppRouter />
+          </IonReactRouter>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </IonApp>
 );
 

@@ -70,6 +70,15 @@ export function useStudentsList(initialQuery = '') {
             timeoutsRef.current.delete(id);
         }
 
+        // Si el usuario revierte al valor original durante el cooldown → cancelar sin API call
+        const storedPrev = previousValuesRef.current.get(id);
+        if (storedPrev !== undefined && storedPrev === next) {
+            previousValuesRef.current.delete(id);
+            setPendingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+            setStudents((prev) => prev.map((s) => s.id === id ? { ...s, approved: next } : s));
+            return;
+        }
+
         // Actualización optimista + guardar valor previo para deshacer
         setStudents((prev) => {
             if (!previousValuesRef.current.has(id)) {
@@ -127,20 +136,21 @@ export function useStudentsList(initialQuery = '') {
     // ── Filtrado ─────────────────────────────────────────────────────
 
     const filtered = useMemo(() => {
-        const normalize = (str: string) =>
-            str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const q = normalize(query.trim());
+        const normalize = (val: unknown) =>
+            (val == null ? '' : String(val)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const normalizeId = (val: unknown) =>
+            normalize(val).replace(/[^a-z0-9]/g, '');
+        const tokens = normalize(query).split(/\s+/).filter(Boolean);
+        const queryId = normalizeId(query);
         return students.filter((s) => {
-            const matchText =
-                !q ||
-                normalize(s.nombreCompleto).includes(q) ||
-                normalize(s.carnetId).includes(q) ||
-                normalize(s.correoInstitucional).includes(q);
+            const haystack = `${normalize(s.nombreCompleto)} ${normalize(s.correoInstitucional)}`;
+            const matchText = tokens.length === 0 || tokens.every((t) => haystack.includes(t));
+            const matchId = queryId === '' || normalizeId(s.carnetId).includes(queryId);
             const matchStatus =
                 statusFilter === 'all' ||
                 (statusFilter === 'approved' && s.approved) ||
                 (statusFilter === 'pending' && !s.approved);
-            return matchText && matchStatus;
+            return (matchText || matchId) && matchStatus;
         });
     }, [students, query, statusFilter]);
 

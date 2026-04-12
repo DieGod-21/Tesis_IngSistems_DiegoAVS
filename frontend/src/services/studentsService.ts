@@ -172,6 +172,10 @@ export async function downloadTemplate(): Promise<void> {
     URL.revokeObjectURL(url);
 }
 
+export async function deleteUpload(id: string): Promise<void> {
+    await apiFetch<void>(`/uploads/${id}`, { method: 'DELETE' });
+}
+
 export async function getRecentUploads(): Promise<UploadItem[]> {
     const rows = await apiFetch<BackendUpload[]>('/uploads');
     return rows.map((r) => ({

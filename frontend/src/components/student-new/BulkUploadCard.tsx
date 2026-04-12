@@ -384,10 +384,20 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                         </div>
                         {state.result.errors.length > 0 && (
                             <div className="sn-result__errors-wrap">
-                                <p className="sn-result__errors-title">Filas con error:</p>
+                                <div className="sn-result__reject-header">
+                                    <div className="sn-result__reject-icon-wrap">
+                                        <XCircle size={18} className="sn-result__reject-main-icon" />
+                                    </div>
+                                    <div className="sn-result__reject-text">
+                                        <span className="sn-result__reject-primary">Errors detected in upload</span>
+                                        <span className="sn-result__reject-secondary">Registros Rechazados</span>
+                                    </div>
+                                    <span className="sn-result__reject-count">{state.result.rejected}</span>
+                                </div>
                                 <ul className="sn-result__errors">
                                     {state.result.errors.map((e) => (
-                                        <li key={`${e.row}-${e.carnetId}`}>
+                                        <li key={`${e.row}-${e.carnetId}`} className="sn-result__err-item">
+                                            <XCircle size={12} className="sn-result__err-icon" aria-hidden="true" />
                                             <span className="sn-result__err-row">Fila {e.row}</span>
                                             {e.carnetId && <span className="sn-result__err-carnet">{e.carnetId}</span>}
                                             <span className="sn-result__err-reason">{e.reason}</span>
@@ -425,11 +435,11 @@ const BulkUploadCard: React.FC<BulkUploadCardProps> = ({ onUploaded }) => {
                     <div className="sn-info-block">
                         <AlertCircle size={16} className="sn-info-block__icon" />
                         <div>
-                            <p className="sn-info-block__title">Columnas del archivo Excel</p>
+                            <p className="sn-info-block__title">Columnas requeridas en el archivo</p>
                             <p className="sn-info-block__body">
-                                Requeridas: <code>Full Name</code>, <code>Carnet ID</code>,{' '}
-                                <code>Academic Phase</code>, <code>Status</code> ("aprobado"/"desaprobado").{' '}
-                                Opcional: <code>Email (optional)</code>.
+                                Requeridas: <code>Nombre completo</code>, <code>Carné</code>,{' '}
+                                <code>Fase académica</code>, <code>Estado</code> ("aprobado"/"desaprobado").{' '}
+                                Opcional: <code>Correo electrónico</code>.
                             </p>
                         </div>
                     </div>

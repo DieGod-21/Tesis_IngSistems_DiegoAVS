@@ -2,16 +2,18 @@
  * RecentUploads.tsx
  *
  * Historial de cargas masivas con estadísticas por carga y panel
- * de errores expandible por fila.
+ * de errores expandible por fila. Incluye eliminación individual
+ * con confirmación inline y animación de salida.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     CheckCircle, XCircle, Clock,
     FileSpreadsheet, FileText,
     ChevronDown, ChevronUp, User,
+    Trash2, AlertTriangle,
 } from 'lucide-react';
-import { getRecentUploads } from '../../services/studentsService';
+import { getRecentUploads, deleteUpload } from '../../services/studentsService';
 import type { UploadItem, UploadError } from '../../services/studentsService';
 
 interface RecentUploadsProps {
@@ -51,12 +53,60 @@ const ErrorsPanel: React.FC<{ errors: UploadError[] }> = ({ errors }) => (
     </div>
 );
 
-const UploadRow: React.FC<{ item: UploadItem }> = ({ item }) => {
-    const [expanded, setExpanded] = useState(false);
+interface UploadRowProps {
+    item: UploadItem;
+    onDeleted: (id: string) => void;
+}
+
+const UploadRow: React.FC<UploadRowProps> = ({ item, onDeleted }) => {
+    const liRef                       = useRef<HTMLLIElement>(null);
+    const [expanded,   setExpanded  ] = useState(false);
+    const [confirming, setConfirming] = useState(false);
+    const [deleting,   setDeleting  ] = useState(false);
+    const [removing,   setRemoving  ] = useState(false);
     const hasErrors = item.errors.length > 0;
 
+    const triggerRemove = useCallback(() => {
+        const el = liRef.current;
+        if (!el) { onDeleted(item.id); return; }
+
+        // 1. Lock the current rendered height so the transition has a "from" value
+        const h = el.offsetHeight;
+        el.style.height       = `${h}px`;
+        el.style.overflow     = 'hidden';
+        el.style.marginBottom = '6px'; // ensure it matches CSS even for :last-child
+
+        // 2. Force a reflow so the browser registers the starting state
+        void el.offsetHeight;
+
+        // 3. Apply transitions and animate to collapsed state
+        el.style.transition   = 'height 0.32s ease, opacity 0.22s ease, transform 0.22s ease, margin-bottom 0.32s ease';
+        el.style.height       = '0';
+        el.style.opacity      = '0';
+        el.style.transform    = 'translateX(-8px)';
+        el.style.marginBottom = '0'; // collapses the inter-item gap in sync with height
+
+        setRemoving(true);
+        // Remove after the slowest transition (height: 0.32s) completes
+        setTimeout(() => onDeleted(item.id), 340);
+    }, [item.id, onDeleted]);
+
+    const handleConfirm = async () => {
+        setDeleting(true);
+        try {
+            await deleteUpload(item.id);
+            triggerRemove();
+        } catch {
+            setDeleting(false);
+            setConfirming(false);
+        }
+    };
+
     return (
-        <li className={`sn-upload__item sn-upload__item--${item.status}`}>
+        <li
+            ref={liRef}
+            className={`sn-upload__item sn-upload__item--${item.status}${removing ? ' sn-upload__item--removing' : ''}`}
+        >
             {/* ── Fila principal ── */}
             <div className="sn-upload__main">
                 <div className="sn-upload__left">
@@ -80,7 +130,7 @@ const UploadRow: React.FC<{ item: UploadItem }> = ({ item }) => {
                             / {item.total}
                         </span>
                     </div>
-                    {hasErrors && (
+                    {hasErrors && !confirming && (
                         <button
                             type="button"
                             className="sn-upload__toggle"
@@ -91,8 +141,43 @@ const UploadRow: React.FC<{ item: UploadItem }> = ({ item }) => {
                             {expanded ? 'Ocultar' : 'Ver errores'}
                         </button>
                     )}
+                    {!confirming && (
+                        <button
+                            type="button"
+                            className="sn-upload__delete-btn"
+                            onClick={() => setConfirming(true)}
+                            aria-label="Eliminar registro"
+                            title="Eliminar registro"
+                        >
+                            <Trash2 size={13} />
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {/* ── Confirmación inline ── */}
+            {confirming && (
+                <div className="sn-upload__confirm">
+                    <AlertTriangle size={13} className="sn-upload__confirm-icon" />
+                    <span className="sn-upload__confirm-text">¿Eliminar este registro?</span>
+                    <button
+                        type="button"
+                        className="sn-upload__confirm-yes"
+                        onClick={handleConfirm}
+                        disabled={deleting}
+                    >
+                        {deleting ? '…' : 'Eliminar'}
+                    </button>
+                    <button
+                        type="button"
+                        className="sn-upload__confirm-no"
+                        onClick={() => setConfirming(false)}
+                        disabled={deleting}
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            )}
 
             {/* ── Meta (fecha + usuario) ── */}
             <div className="sn-upload__meta">
@@ -127,6 +212,10 @@ const RecentUploads: React.FC<RecentUploadsProps> = ({ refreshKey = 0 }) => {
         return () => { canceled = true; };
     }, [refreshKey]);
 
+    const handleDeleted = (id: string) => {
+        setUploads((prev) => prev.filter((u) => u.id !== id));
+    };
+
     return (
         <div className="sn-uploads">
             <p className="sn-uploads__title">Últimas Cargas</p>
@@ -146,7 +235,7 @@ const RecentUploads: React.FC<RecentUploadsProps> = ({ refreshKey = 0 }) => {
             ) : (
                 <ul className="sn-uploads__list">
                     {uploads.map((item) => (
-                        <UploadRow key={item.id} item={item} />
+                        <UploadRow key={item.id} item={item} onDeleted={handleDeleted} />
                     ))}
                 </ul>
             )}

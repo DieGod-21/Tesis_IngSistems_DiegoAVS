@@ -176,7 +176,7 @@ const StudentsListPage: React.FC = () => {
                                 <th className="sl-table__th">Aprobación</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody key={`${query}|${statusFilter}`}>
                             {loading && <TableSkeleton />}
                             {!loading && filtered.length === 0 && (
                                 <tr>
@@ -236,6 +236,7 @@ const StudentsListPage: React.FC = () => {
                                                 <ApprovalToggle
                                                     checked={student.approved}
                                                     onChange={(next) => handleToggle(student.id, next)}
+                                                    disabled={pendingIds.has(student.id)}
                                                     label={student.approved ? 'Aprobado' : 'Rechazado'}
                                                 />
                                                 {pendingIds.has(student.id) && (

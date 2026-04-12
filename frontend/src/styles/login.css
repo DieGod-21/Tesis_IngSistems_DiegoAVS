@@ -768,3 +768,159 @@ ion-content::part(scroll) {
 .auth-input-wrapper {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
+
+/* ─── Mobile responsive fix ──────────────────────────────────────── */
+/*
+ * En pantallas pequeñas, el panel azul izquierdo está oculto.
+ * Aplicamos el fondo azul directamente a auth-screen y convertimos
+ * la zona del logo móvil en un encabezado azul con el logo visible.
+ */
+
+@media (max-width: 767px) {
+  .auth-screen {
+    background: linear-gradient(160deg, #001a33 0%, #003366 50%, #00264d 100%);
+  }
+
+  .auth-form-section {
+    background: transparent;
+    justify-content: flex-start;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  .auth-mobile-logo {
+    width: 100%;
+    padding: 2.5rem 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .auth-mobile-logo img {
+    width: 5rem;
+    height: 5rem;
+    max-width: 100%;
+    object-fit: contain;
+    background: #ffffff;
+    padding: 0.75rem;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    display: block;
+  }
+
+  .auth-mobile-logo__title {
+    color: #ffffff;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .auth-form-container {
+    background: #ffffff;
+    border-radius: 24px 24px 0 0;
+    padding: 2rem 1.5rem 6rem;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.15);
+    flex: 1;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* ─── Dark Mode ──────────────────────────────────────────────────── */
+
+[data-theme="dark"] .auth-form-section {
+  background: #1e293b;
+}
+
+[data-theme="dark"] .auth-form-header__title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .auth-form-header__subtitle {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .auth-form__label {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .auth-form__label-row .auth-form__forgot {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .auth-input-wrapper {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .auth-input-wrapper ion-input {
+  --color: #f1f5f9;
+  --placeholder-color: #64748b;
+}
+
+[data-theme="dark"] .auth-input-wrapper:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+}
+
+[data-theme="dark"] .auth-input-wrapper--error {
+  border-color: #f87171;
+}
+
+[data-theme="dark"] .auth-input-wrapper--error:focus-within {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18);
+}
+
+[data-theme="dark"] .auth-password-toggle {
+  color: #64748b;
+}
+
+[data-theme="dark"] .auth-password-toggle:hover {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .auth-secondary {
+  border-top-color: #2d3f55;
+}
+
+[data-theme="dark"] .auth-secondary p {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .auth-secondary__link {
+  color: #f87171;
+}
+
+[data-theme="dark"] .auth-help-links {
+  color: #64748b;
+}
+
+[data-theme="dark"] .auth-help-links a:hover {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .auth-form__field-hint {
+  background: #0f172a;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .auth-form__field-hint strong {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .auth-copyright-footer {
+  color: #64748b;
+}
+
+/* Mobile dark mode: el fondo del form container */
+@media (max-width: 767px) {
+  [data-theme="dark"] .auth-form-container {
+    background: #1e293b;
+  }
+
+  [data-theme="dark"] .auth-screen {
+    background: linear-gradient(160deg, #020917 0%, #0f172a 50%, #030d1a 100%);
+  }
+}

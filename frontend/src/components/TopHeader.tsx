@@ -16,9 +16,10 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, Bell, Menu } from 'lucide-react';
+import { Search, Bell, Menu, Sun, Moon } from 'lucide-react';
 import { useHistory, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface TopHeaderProps {
     onMenuToggle?: () => void;
@@ -26,6 +27,7 @@ interface TopHeaderProps {
 
 const TopHeader: React.FC<TopHeaderProps> = ({ onMenuToggle }) => {
     const { user } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const history = useHistory();
     const location = useLocation();
     const [inputValue, setInputValue] = useState('');
@@ -106,6 +108,20 @@ const TopHeader: React.FC<TopHeaderProps> = ({ onMenuToggle }) => {
                  * TODO: Integrar servicio de notificaciones académicas
                  * TODO: Agregar WebSocket para notificaciones en tiempo real
                  */}
+                {/* Toggle de tema claro/oscuro */}
+                <button
+                    className="dash-header__theme-toggle"
+                    onClick={toggleTheme}
+                    aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+                    type="button"
+                >
+                    {theme === 'dark'
+                        ? <Sun size={20} aria-hidden="true" />
+                        : <Moon size={20} aria-hidden="true" />
+                    }
+                </button>
+
                 <div className="dash-header__bell-wrapper" title="Próximamente: Notificaciones académicas">
                     <button
                         className="dash-header__bell dash-header__bell--placeholder"
