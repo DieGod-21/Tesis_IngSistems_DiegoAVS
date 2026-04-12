@@ -42,6 +42,7 @@ app.use('/api/events',      require('./routes/events.routes'));
 app.use('/api/deadlines',   require('./routes/deadlines.routes'));
 app.use('/api/uploads',         require('./routes/uploads.routes'));
 app.use('/api/academic-phases', require('./routes/academic_phases.routes'));
+app.use('/api/notifications',   require('./routes/notifications.routes'));
 
 app.get('/', (_req, res) => {
     res.json({ message: 'Backend tesis_db funcionando correctamente', version: '1.0.0' });

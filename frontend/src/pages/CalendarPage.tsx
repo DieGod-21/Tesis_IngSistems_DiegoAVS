@@ -1,13 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, LayoutGrid, AlignJustify } from 'lucide-react';
 import AppShell from '../layout/AppShell';
-import { getCalendarEvents, getCalendarDeadlines } from '../services/calendarService';
-import type { CalendarEvent, CalendarDeadline } from '../services/calendarService';
+import {
+    getCalendarEvents,
+    getCalendarDeadlines,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+} from '../services/calendarService';
+import type { CalendarEvent, CalendarDeadline, EventPayload } from '../services/calendarService';
+import EventModal from '../components/EventModal';
+import { useAuth } from '../context/AuthContext';
 import '../styles/calendar.css';
-import '../styles/student-new.css';
 
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DAYS_FULL  = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 const DAYS_SHORT = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function toDateKey(dateStr: string): string {
     const m = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -20,62 +33,107 @@ function localKey(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function buildGrid(year: number, month: number): (Date | null)[] {
-    const first = new Date(year, month, 1);
-    const startDow = (first.getDay() + 6) % 7; // Monday = 0
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+function buildMonthGrid(year: number, month: number): (Date | null)[] {
+    const first    = new Date(year, month, 1);
+    const startDow = (first.getDay() + 6) % 7;
+    const days     = new Date(year, month + 1, 0).getDate();
     const cells: (Date | null)[] = Array(startDow).fill(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+    for (let d = 1; d <= days; d++) cells.push(new Date(year, month, d));
     while (cells.length % 7 !== 0) cells.push(null);
     return cells;
 }
 
-function chipClass(tipo: string, isDeadline: boolean): string {
+function getWeekDates(anchor: Date): Date[] {
+    const day = (anchor.getDay() + 6) % 7; // Mon=0
+    const mon = new Date(anchor);
+    mon.setDate(anchor.getDate() - day);
+    return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(mon);
+        d.setDate(mon.getDate() + i);
+        return d;
+    });
+}
+
+function chipColorClass(tipo: string, isDeadline: boolean): string {
     if (isDeadline) return 'cal-chip--orange';
     switch (tipo.toLowerCase()) {
         case 'examen':                       return 'cal-chip--red';
-        case 'defensa':
-        case 'revision':
+        case 'defensa': case 'revision':
         case 'reunion':                      return 'cal-chip--blue';
         case 'entrega':                      return 'cal-chip--orange';
         default:                             return 'cal-chip--gray';
     }
 }
 
-interface DayItem { id: string; title: string; tipo: string; isDeadline: boolean; }
+function formatDisplayDate(key: string): string {
+    const [y, m, d] = key.split('-').map(Number);
+    return `${d} de ${MONTHS_ES[m - 1]} de ${y}`;
+}
+
+function eventsThisWeek(map: Map<string, DayItem[]>, anchor: Date): number {
+    return getWeekDates(anchor).reduce((acc, d) => acc + (map.get(localKey(d))?.length ?? 0), 0);
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DayItem {
+    id: string;
+    title: string;
+    tipo: string;
+    isDeadline: boolean;
+    raw?: CalendarEvent;
+}
+
+type ViewMode = 'month' | 'week';
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+
+interface TooltipState { x: number; y: number; item: DayItem; }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const CalendarPage: React.FC = () => {
-    const today = new Date();
+    const { user } = useAuth();
+    const canWrite = user?.role === 'admin' || user?.role === 'asesor';
+    const today    = new Date();
     const todayKey = localKey(today);
 
-    const [events,    setEvents]    = useState<CalendarEvent[]>([]);
-    const [deadlines, setDeadlines] = useState<CalendarDeadline[]>([]);
-    const [loading,   setLoading]   = useState(true);
-    const [year,      setYear]      = useState(today.getFullYear());
-    const [month,     setMonth]     = useState(today.getMonth());
+    const [events,      setEvents]      = useState<CalendarEvent[]>([]);
+    const [deadlines,   setDeadlines]   = useState<CalendarDeadline[]>([]);
+    const [loading,     setLoading]     = useState(true);
+    const [year,        setYear]        = useState(today.getFullYear());
+    const [month,       setMonth]       = useState(today.getMonth());
+    const [weekAnchor,  setWeekAnchor]  = useState(today);
+    const [viewMode,    setViewMode]    = useState<ViewMode>('month');
     const [selectedDay, setSelectedDay] = useState<string | null>(null);
+    const [tooltip,     setTooltip]     = useState<TooltipState | null>(null);
+    const [modalEvent,  setModalEvent]  = useState<CalendarEvent | null | undefined>(undefined);
+    const [modalDate,   setModalDate]   = useState<string | undefined>(undefined);
 
-    useEffect(() => {
-        let canceled = false;
-        Promise.all([getCalendarEvents(), getCalendarDeadlines()])
-            .then(([evts, dls]) => {
-                if (canceled) return;
-                setEvents(evts);
-                setDeadlines(dls);
-            })
-            .catch(() => {})
-            .finally(() => { if (!canceled) setLoading(false); });
-        return () => { canceled = true; };
+    // modalEvent = undefined → closed, null → create, CalendarEvent → edit
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [evts, dls] = await Promise.all([getCalendarEvents(), getCalendarDeadlines()]);
+            setEvents(evts);
+            setDeadlines(dls);
+        } catch { /* silent */ }
+        finally { setLoading(false); }
     }, []);
 
-    const eventMap = useMemo(() => {
+    useEffect(() => { loadData(); }, [loadData]);
+
+    const eventMap = useMemo<Map<string, DayItem[]>>(() => {
         const map = new Map<string, DayItem[]>();
         const push = (key: string, item: DayItem) => {
             if (!map.has(key)) map.set(key, []);
             map.get(key)!.push(item);
         };
         events.forEach((ev) =>
-            push(toDateKey(ev.fecha_inicio), { id: ev.id, title: ev.titulo, tipo: ev.tipo, isDeadline: false })
+            push(toDateKey(ev.fecha_inicio), {
+                id: ev.id, title: ev.titulo, tipo: ev.tipo, isDeadline: false, raw: ev,
+            })
         );
         deadlines.forEach((dl) =>
             push(toDateKey(dl.fecha), { id: dl.id, title: dl.titulo, tipo: 'deadline', isDeadline: true })
@@ -83,36 +141,117 @@ const CalendarPage: React.FC = () => {
         return map;
     }, [events, deadlines]);
 
-    const cells = useMemo(() => buildGrid(year, month), [year, month]);
+    const weekDates = useMemo(() => getWeekDates(weekAnchor), [weekAnchor]);
+    const monthCells = useMemo(() => buildMonthGrid(year, month), [year, month]);
 
-    const prevMonth = () => {
-        if (month === 0) { setYear(y => y - 1); setMonth(11); }
-        else setMonth(m => m - 1);
+    // ── Navigation ──────────────────────────────────────────────────────────
+
+    const prevPeriod = () => {
+        if (viewMode === 'month') {
+            if (month === 0) { setYear(y => y - 1); setMonth(11); }
+            else setMonth(m => m - 1);
+            setSelectedDay(null);
+        } else {
+            setWeekAnchor((d) => { const n = new Date(d); n.setDate(d.getDate() - 7); return n; });
+        }
+    };
+    const nextPeriod = () => {
+        if (viewMode === 'month') {
+            if (month === 11) { setYear(y => y + 1); setMonth(0); }
+            else setMonth(m => m + 1);
+            setSelectedDay(null);
+        } else {
+            setWeekAnchor((d) => { const n = new Date(d); n.setDate(d.getDate() + 7); return n; });
+        }
+    };
+    const goToday = () => {
+        setYear(today.getFullYear());
+        setMonth(today.getMonth());
+        setWeekAnchor(today);
         setSelectedDay(null);
     };
-    const nextMonth = () => {
-        if (month === 11) { setYear(y => y + 1); setMonth(0); }
-        else setMonth(m => m + 1);
-        setSelectedDay(null);
+
+    // ── Day click ────────────────────────────────────────────────────────────
+
+    const handleDayClick = (key: string) => {
+        setSelectedDay((prev) => (prev === key ? null : key));
     };
 
+    const handleDayDoubleClick = (key: string) => {
+        if (!canWrite) return;
+        setModalDate(key);
+        setModalEvent(null);
+    };
+
+    const handleChipClick = (e: React.MouseEvent, item: DayItem) => {
+        e.stopPropagation();
+        if (item.isDeadline || !item.raw) return;
+        setModalEvent(item.raw);
+        setModalDate(undefined);
+    };
+
+    // ── Tooltip ──────────────────────────────────────────────────────────────
+
+    const showTooltip = (e: React.MouseEvent, item: DayItem) => {
+        setTooltip({ x: e.clientX, y: e.clientY, item });
+    };
+    const hideTooltip = () => setTooltip(null);
+
+    // ── CRUD ────────────────────────────────────────────────────────────────
+
+    const handleSave = async (payload: EventPayload) => {
+        if (modalEvent) {
+            const updated = await updateEvent(modalEvent.id, payload);
+            setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+        } else {
+            const created = await createEvent(payload);
+            setEvents((prev) => [...prev, created]);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        await deleteEvent(id);
+        setEvents((prev) => prev.filter((e) => e.id !== id));
+    };
+
+    // ── Upcoming summary ─────────────────────────────────────────────────────
+
+    const weekCount   = eventsThisWeek(eventMap, viewMode === 'week' ? weekAnchor : today);
     const selectedItems = selectedDay ? (eventMap.get(selectedDay) ?? []) : [];
+
+    // ── Header label ─────────────────────────────────────────────────────────
+
+    const periodLabel = viewMode === 'month'
+        ? `${MONTHS_ES[month]} ${year}`
+        : (() => {
+            const [mon, sun] = [weekDates[0], weekDates[6]];
+            if (mon.getMonth() === sun.getMonth())
+                return `${mon.getDate()}–${sun.getDate()} ${MONTHS_ES[mon.getMonth()]} ${mon.getFullYear()}`;
+            return `${mon.getDate()} ${MONTHS_ES[mon.getMonth()]} – ${sun.getDate()} ${MONTHS_ES[sun.getMonth()]} ${sun.getFullYear()}`;
+        })();
 
     return (
         <AppShell>
             <div className="cal-body">
-                {/* Breadcrumb */}
-                <nav className="sn-breadcrumb" aria-label="Navegación secundaria">
-                    <span className="sn-breadcrumb__item">Inicio</span>
-                    <ChevronRight size={14} className="sn-breadcrumb__sep" />
-                    <span className="sn-breadcrumb__item sn-breadcrumb__item--active">
-                        Calendario Académico
-                    </span>
-                </nav>
-
+                {/* Page header */}
                 <div className="cal-page-header">
-                    <h1 className="cal-page-title">Calendario Académico</h1>
-                    <p className="cal-page-subtitle">Eventos y fechas límite del semestre</p>
+                    <div className="cal-page-header__text">
+                        <h1 className="cal-page-title">Calendario Académico</h1>
+                        <p className="cal-page-subtitle">
+                            {weekCount > 0
+                                ? `${weekCount} evento${weekCount > 1 ? 's' : ''} esta semana`
+                                : 'Sin eventos esta semana'}
+                        </p>
+                    </div>
+                    {canWrite && (
+                        <button
+                            className="cal-btn-new"
+                            onClick={() => { setModalDate(todayKey); setModalEvent(null); }}
+                        >
+                            <Plus size={16} />
+                            Nuevo evento
+                        </button>
+                    )}
                 </div>
 
                 {loading ? (
@@ -123,105 +262,212 @@ const CalendarPage: React.FC = () => {
                 ) : (
                     <div className="cal-month-wrapper">
 
-                        {/* Navigation */}
-                        <div className="cal-nav">
-                            <button className="cal-nav__btn" onClick={prevMonth} aria-label="Mes anterior">
-                                <ChevronLeft size={18} />
-                            </button>
-                            <h2 className="cal-nav__title">{MONTHS_ES[month]} {year}</h2>
-                            <button className="cal-nav__btn" onClick={nextMonth} aria-label="Mes siguiente">
-                                <ChevronRight size={18} />
-                            </button>
-                        </div>
+                        {/* Toolbar */}
+                        <div className="cal-toolbar">
+                            <div className="cal-toolbar__nav">
+                                <button className="cal-nav__btn" onClick={prevPeriod} aria-label="Periodo anterior">
+                                    <ChevronLeft size={18} />
+                                </button>
+                                <h2 className="cal-nav__title">{periodLabel}</h2>
+                                <button className="cal-nav__btn" onClick={nextPeriod} aria-label="Periodo siguiente">
+                                    <ChevronRight size={18} />
+                                </button>
+                                <button className="cal-today-btn" onClick={goToday}>Hoy</button>
+                            </div>
 
-                        {/* Legend */}
-                        <div className="cal-legend">
-                            <span className="cal-chip cal-chip--red">Exámenes</span>
-                            <span className="cal-chip cal-chip--orange">Entregas</span>
-                            <span className="cal-chip cal-chip--blue">Académico</span>
-                            <span className="cal-chip cal-chip--gray">Otros</span>
-                        </div>
+                            <div className="cal-toolbar__right">
+                                {/* Legend */}
+                                <div className="cal-legend">
+                                    <span className="cal-chip cal-chip--blue">Académico</span>
+                                    <span className="cal-chip cal-chip--orange">Entregas</span>
+                                    <span className="cal-chip cal-chip--gray">Otros</span>
+                                </div>
 
-                        {/* Month grid */}
-                        <div className="cal-grid-month" role="grid" aria-label={`Calendario de ${MONTHS_ES[month]} ${year}`}>
-                            {DAYS_SHORT.map((d) => (
-                                <div key={d} className="cal-grid__dow" role="columnheader">{d}</div>
-                            ))}
-
-                            {cells.map((day, idx) => {
-                                if (!day) return (
-                                    <div key={`e-${idx}`} className="cal-cell cal-cell--empty" aria-hidden="true" />
-                                );
-                                const key = localKey(day);
-                                const items = eventMap.get(key) ?? [];
-                                const isToday    = key === todayKey;
-                                const isSelected = key === selectedDay;
-                                const cls = [
-                                    'cal-cell',
-                                    isToday    && 'cal-cell--today',
-                                    isSelected && 'cal-cell--selected',
-                                    items.length > 0 && 'cal-cell--has-events',
-                                ].filter(Boolean).join(' ');
-
-                                return (
-                                    <div
-                                        key={key}
-                                        className={cls}
-                                        onClick={() => setSelectedDay(isSelected ? null : key)}
-                                        role="gridcell"
-                                        tabIndex={0}
-                                        aria-label={`${day.getDate()} de ${MONTHS_ES[month]}${items.length ? `, ${items.length} evento${items.length > 1 ? 's' : ''}` : ''}`}
-                                        onKeyDown={(e) => e.key === 'Enter' && setSelectedDay(isSelected ? null : key)}
+                                {/* View toggle */}
+                                <div className="cal-view-toggle" role="group" aria-label="Vista del calendario">
+                                    <button
+                                        className={`cal-view-btn ${viewMode === 'month' ? 'cal-view-btn--active' : ''}`}
+                                        onClick={() => setViewMode('month')}
+                                        aria-pressed={viewMode === 'month'}
+                                        title="Vista mensual"
                                     >
-                                        <span className="cal-cell__num">{day.getDate()}</span>
-                                        <div className="cal-cell__events">
-                                            {items.slice(0, 2).map((it) => (
-                                                <span
-                                                    key={it.id}
-                                                    className={`cal-chip cal-chip--sm ${chipClass(it.tipo, it.isDeadline)}`}
-                                                    title={it.title}
-                                                >
-                                                    {it.title}
-                                                </span>
-                                            ))}
-                                            {items.length > 2 && (
-                                                <span className="cal-cell__more">+{items.length - 2} más</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                        <LayoutGrid size={15} />
+                                    </button>
+                                    <button
+                                        className={`cal-view-btn ${viewMode === 'week' ? 'cal-view-btn--active' : ''}`}
+                                        onClick={() => setViewMode('week')}
+                                        aria-pressed={viewMode === 'week'}
+                                        title="Vista semanal"
+                                    >
+                                        <AlignJustify size={15} />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Day detail panel */}
-                        {selectedDay && (
-                            <div className="cal-day-panel" role="region" aria-label="Eventos del día seleccionado">
+                        {/* ── Month View ────────────────────────────────────── */}
+                        {viewMode === 'month' && (
+                            <>
+                                <div className="cal-grid-month" role="grid" aria-label={`Calendario ${MONTHS_ES[month]} ${year}`}>
+                                    {DAYS_SHORT.map((d) => (
+                                        <div key={d} className="cal-grid__dow" role="columnheader">{d}</div>
+                                    ))}
+                                    {monthCells.map((day, idx) => {
+                                        if (!day) return (
+                                            <div key={`e-${idx}`} className="cal-cell cal-cell--empty" aria-hidden="true" />
+                                        );
+                                        const key   = localKey(day);
+                                        const items = eventMap.get(key) ?? [];
+                                        const cls   = [
+                                            'cal-cell',
+                                            key === todayKey  && 'cal-cell--today',
+                                            key === selectedDay && 'cal-cell--selected',
+                                            items.length > 0  && 'cal-cell--has-events',
+                                        ].filter(Boolean).join(' ');
+
+                                        return (
+                                            <div
+                                                key={key}
+                                                className={cls}
+                                                onClick={() => handleDayClick(key)}
+                                                onDoubleClick={() => handleDayDoubleClick(key)}
+                                                role="gridcell"
+                                                tabIndex={0}
+                                                aria-label={`${day.getDate()} ${MONTHS_ES[month]}${items.length ? `, ${items.length} evento${items.length > 1 ? 's' : ''}` : ''}`}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleDayClick(key)}
+                                            >
+                                                <span className="cal-cell__num">{day.getDate()}</span>
+                                                <div className="cal-cell__events">
+                                                    {items.slice(0, 2).map((it) => (
+                                                        <span
+                                                            key={it.id}
+                                                            className={`cal-chip cal-chip--sm ${chipColorClass(it.tipo, it.isDeadline)}`}
+                                                            title={it.title}
+                                                            onClick={(e) => handleChipClick(e, it)}
+                                                            onMouseEnter={(e) => showTooltip(e, it)}
+                                                            onMouseLeave={hideTooltip}
+                                                        >
+                                                            {it.title}
+                                                        </span>
+                                                    ))}
+                                                    {items.length > 2 && (
+                                                        <span className="cal-cell__more">+{items.length - 2} más</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Empty month state */}
+                                {!loading && eventMap.size === 0 && (
+                                    <div className="cal-empty-state">
+                                        <Calendar size={40} className="cal-empty-state__icon" />
+                                        <p className="cal-empty-state__title">Sin eventos este mes</p>
+                                        {canWrite && (
+                                            <p className="cal-empty-state__hint">
+                                                Haz doble clic en un día o usa el botón "Nuevo evento"
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* ── Week View ─────────────────────────────────────── */}
+                        {viewMode === 'week' && (
+                            <div className="cal-week-grid">
+                                {weekDates.map((day, i) => {
+                                    const key   = localKey(day);
+                                    const items = eventMap.get(key) ?? [];
+                                    const isToday = key === todayKey;
+                                    return (
+                                        <div
+                                            key={key}
+                                            className={`cal-week-col ${isToday ? 'cal-week-col--today' : ''}`}
+                                            onDoubleClick={() => handleDayDoubleClick(key)}
+                                        >
+                                            <div className="cal-week-col__header">
+                                                <span className="cal-week-col__dow">{DAYS_FULL[i].slice(0, 3)}</span>
+                                                <span className={`cal-week-col__num ${isToday ? 'cal-week-col__num--today' : ''}`}>
+                                                    {day.getDate()}
+                                                </span>
+                                            </div>
+                                            <div className="cal-week-col__events">
+                                                {items.length === 0 ? (
+                                                    <span className="cal-week-col__empty">–</span>
+                                                ) : items.map((it) => (
+                                                    <div
+                                                        key={it.id}
+                                                        className={`cal-week-event ${chipColorClass(it.tipo, it.isDeadline).replace('cal-chip--', 'cal-week-event--')}`}
+                                                        onClick={(e) => handleChipClick(e, it)}
+                                                        onMouseEnter={(e) => showTooltip(e, it)}
+                                                        onMouseLeave={hideTooltip}
+                                                        title={it.title}
+                                                    >
+                                                        <span className="cal-week-event__dot" />
+                                                        <span className="cal-week-event__title">{it.title}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* ── Day Detail Panel (month view) ─────────────────── */}
+                        {viewMode === 'month' && selectedDay && (
+                            <div className="cal-day-panel" role="region" aria-label="Eventos del día">
                                 <div className="cal-day-panel__header">
-                                    <h3 className="cal-day-panel__title">
-                                        {(() => {
-                                            const [y, m, d] = selectedDay.split('-').map(Number);
-                                            return `${d} de ${MONTHS_ES[m - 1]} de ${y}`;
-                                        })()}
-                                    </h3>
+                                    <div className="cal-day-panel__header-left">
+                                        <h3 className="cal-day-panel__title">{formatDisplayDate(selectedDay)}</h3>
+                                        {canWrite && selectedItems.length > 0 && (
+                                            <button
+                                                className="cal-day-panel__add"
+                                                onClick={() => { setModalDate(selectedDay); setModalEvent(null); }}
+                                                title="Crear evento en este día"
+                                            >
+                                                <Plus size={14} /> Agregar
+                                            </button>
+                                        )}
+                                    </div>
                                     <button
                                         className="cal-day-panel__close"
                                         onClick={() => setSelectedDay(null)}
                                         aria-label="Cerrar panel"
                                     >
-                                        <X size={16} />
+                                        <ChevronLeft size={16} style={{ transform: 'rotate(270deg)' }} />
                                     </button>
                                 </div>
 
                                 {selectedItems.length === 0 ? (
-                                    <p className="cal-day-panel__empty">Sin eventos registrados para este día.</p>
+                                    <div className="cal-day-panel__empty-wrap">
+                                        <p className="cal-day-panel__empty">Sin eventos para este día.</p>
+                                        {canWrite && (
+                                            <button
+                                                className="cal-day-panel__add-hint"
+                                                onClick={() => { setModalDate(selectedDay); setModalEvent(null); }}
+                                            >
+                                                <Plus size={13} /> Crear primer evento
+                                            </button>
+                                        )}
+                                    </div>
                                 ) : (
                                     <ul className="cal-day-panel__list">
                                         {selectedItems.map((it) => (
-                                            <li key={it.id} className="cal-day-panel__item">
-                                                <span className={`cal-chip ${chipClass(it.tipo, it.isDeadline)}`}>
+                                            <li
+                                                key={it.id}
+                                                className={`cal-day-panel__item ${!it.isDeadline && canWrite ? 'cal-day-panel__item--clickable' : ''}`}
+                                                onClick={() => handleChipClick({ stopPropagation: () => {} } as React.MouseEvent, it)}
+                                            >
+                                                <span className={`cal-chip ${chipColorClass(it.tipo, it.isDeadline)}`}>
                                                     {it.isDeadline ? 'Entrega' : it.tipo}
                                                 </span>
                                                 <span className="cal-day-panel__item-title">{it.title}</span>
+                                                {!it.isDeadline && it.raw?.ubicacion && (
+                                                    <span className="cal-day-panel__item-loc">{it.raw.ubicacion}</span>
+                                                )}
                                             </li>
                                         ))}
                                     </ul>
@@ -231,6 +477,33 @@ const CalendarPage: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* ── Hover Tooltip ──────────────────────────────────────────── */}
+            {tooltip && (
+                <div
+                    className="cal-tooltip"
+                    style={{ top: tooltip.y + 12, left: tooltip.x + 12 }}
+                    aria-hidden="true"
+                >
+                    <p className="cal-tooltip__title">{tooltip.item.title}</p>
+                    <p className="cal-tooltip__tipo">{tooltip.item.isDeadline ? 'Fecha límite' : tooltip.item.tipo}</p>
+                    {!tooltip.item.isDeadline && tooltip.item.raw?.ubicacion && (
+                        <p className="cal-tooltip__loc">{tooltip.item.raw.ubicacion}</p>
+                    )}
+                </div>
+            )}
+
+            {/* ── Event Modal ────────────────────────────────────────────── */}
+            {modalEvent !== undefined && (
+                <EventModal
+                    event={modalEvent}
+                    defaultDate={modalDate}
+                    canWrite={canWrite}
+                    onSave={handleSave}
+                    onDelete={canWrite ? handleDelete : undefined}
+                    onClose={() => setModalEvent(undefined)}
+                />
+            )}
         </AppShell>
     );
 };
