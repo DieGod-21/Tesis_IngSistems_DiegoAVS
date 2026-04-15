@@ -65,6 +65,17 @@ function chipColorClass(tipo: string, isDeadline: boolean): string {
     }
 }
 
+function cardColorClass(tipo: string, isDeadline: boolean): string {
+    if (isDeadline) return 'cal-event-card--orange';
+    switch (tipo.toLowerCase()) {
+        case 'examen':                       return 'cal-event-card--red';
+        case 'defensa': case 'revision':
+        case 'reunion':                      return 'cal-event-card--blue';
+        case 'entrega':                      return 'cal-event-card--orange';
+        default:                             return 'cal-event-card--gray';
+    }
+}
+
 function formatDisplayDate(key: string): string {
     const [y, m, d] = key.split('-').map(Number);
     return `${d} de ${MONTHS_ES[m - 1]} de ${y}`;
@@ -338,20 +349,20 @@ const CalendarPage: React.FC = () => {
                                             >
                                                 <span className="cal-cell__num">{day.getDate()}</span>
                                                 <div className="cal-cell__events">
-                                                    {items.slice(0, 2).map((it) => (
-                                                        <span
+                                                    {items.slice(0, 3).map((it) => (
+                                                        <div
                                                             key={it.id}
-                                                            className={`cal-chip cal-chip--sm ${chipColorClass(it.tipo, it.isDeadline)}`}
+                                                            className={`cal-event-card ${cardColorClass(it.tipo, it.isDeadline)}`}
                                                             title={it.title}
                                                             onClick={(e) => handleChipClick(e, it)}
                                                             onMouseEnter={(e) => showTooltip(e, it)}
                                                             onMouseLeave={hideTooltip}
                                                         >
-                                                            {it.title}
-                                                        </span>
+                                                            <span className="cal-event-card__title">{it.title}</span>
+                                                        </div>
                                                     ))}
-                                                    {items.length > 2 && (
-                                                        <span className="cal-cell__more">+{items.length - 2} más</span>
+                                                    {items.length > 3 && (
+                                                        <span className="cal-cell__more">+{items.length - 3} más</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -458,7 +469,7 @@ const CalendarPage: React.FC = () => {
                                         {selectedItems.map((it) => (
                                             <li
                                                 key={it.id}
-                                                className={`cal-day-panel__item ${!it.isDeadline && canWrite ? 'cal-day-panel__item--clickable' : ''}`}
+                                                className={`cal-day-panel__item ${!it.isDeadline && canWrite ? 'cal-day-panel__item--clickable' : ''} ${chipColorClass(it.tipo, it.isDeadline).replace('cal-chip--', 'cal-day-panel__item--')}`}
                                                 onClick={() => handleChipClick({ stopPropagation: () => {} } as React.MouseEvent, it)}
                                             >
                                                 <span className={`cal-chip ${chipColorClass(it.tipo, it.isDeadline)}`}>
