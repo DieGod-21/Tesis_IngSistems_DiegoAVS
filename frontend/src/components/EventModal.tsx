@@ -72,6 +72,7 @@ const EventModal: React.FC<Props> = ({ event, defaultDate, canWrite, onSave, onD
     );
 
     const [errors, setErrors]   = useState<Partial<Record<keyof FormState, string>>>({});
+    const [apiError, setApiError] = useState<string | null>(null);
     const [saving, setSaving]   = useState(false);
     const [deleting, setDel]    = useState(false);
     const [confirmDel, setConf] = useState(false);
@@ -93,8 +94,10 @@ const EventModal: React.FC<Props> = ({ event, defaultDate, canWrite, onSave, onD
         return () => window.removeEventListener('keydown', handler);
     }, [triggerClose]);
 
-    const set = (field: keyof FormState, value: string | boolean | number) =>
+    const set = (field: keyof FormState, value: string | boolean | number) => {
+        setApiError(null);
         setForm((prev) => ({ ...prev, [field]: value }));
+    };
 
     const validate = (): boolean => {
         const e: Partial<Record<keyof FormState, string>> = {};
@@ -122,8 +125,9 @@ const EventModal: React.FC<Props> = ({ event, defaultDate, canWrite, onSave, onD
                 recordatorio_tiempo: form.recordatorio_tiempo,
             });
             triggerClose();
-        } catch { /* error handled by parent */ }
-        finally { setSaving(false); }
+        } catch (err) {
+            setApiError(err instanceof Error ? err.message : 'Error al guardar el evento');
+        } finally { setSaving(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form, onSave, triggerClose]);
 
@@ -307,6 +311,11 @@ const EventModal: React.FC<Props> = ({ event, defaultDate, canWrite, onSave, onD
                         </div>
                     )}
                 </div>
+
+                {/* API error banner */}
+                {apiError && (
+                    <p className="em-api-error" role="alert">{apiError}</p>
+                )}
 
                 {/* Footer */}
                 {canWrite && (

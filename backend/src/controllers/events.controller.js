@@ -70,6 +70,16 @@ const create = async (req, res, next) => {
     const rec       = recordatorio        === true || recordatorio === 'true';
     const recTiempo = parseInt(recordatorio_tiempo ?? '1', 10) || 1;
 
+    // Auto-resolve semester if not provided
+    let resolvedSemesterId = semester_id;
+    if (!resolvedSemesterId) {
+      const { rows: sem } = await pool.query(
+        'SELECT id FROM semesters ORDER BY anio DESC, numero DESC LIMIT 1'
+      );
+      if (!sem.length) return res.status(400).json({ error: 'No existe ningún semestre registrado' });
+      resolvedSemesterId = sem[0].id;
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO events
          (id, titulo, tipo, fecha_inicio, fecha_fin, ubicacion, project_id, semester_id,
@@ -77,7 +87,7 @@ const create = async (req, res, next) => {
           created_by, created_at, updated_at)
        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
        RETURNING ${EVENT_COLS}`,
-      [titulo.trim(), tipo, fecha_inicio, fecha_fin, ubicacion?.trim(), project_id, semester_id,
+      [titulo.trim(), tipo, fecha_inicio, fecha_fin, ubicacion?.trim(), project_id, resolvedSemesterId,
        fase_academica, descripcion?.trim(), rec, recTiempo, created_by]
     );
     res.status(201).json(rows[0]);

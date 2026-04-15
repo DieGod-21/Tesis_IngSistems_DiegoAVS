@@ -57,3 +57,7 @@ export function updateEvent(id: string, data: Partial<EventPayload>): Promise<Ca
 export function deleteEvent(id: string): Promise<void> {
     return apiFetch<void>(`/events/${id}`, { method: 'DELETE' });
 }
+
+export function deleteDeadline(id: string): Promise<void> {
+    return apiFetch<void>(`/deadlines/${id}`, { method: 'DELETE' });
+}

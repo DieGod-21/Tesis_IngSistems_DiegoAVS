@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Calendar, LayoutGrid, AlignJustify } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, LayoutGrid, AlignJustify, Trash2 } from 'lucide-react';
 import AppShell from '../layout/AppShell';
 import {
     getCalendarEvents,
@@ -7,10 +7,13 @@ import {
     createEvent,
     updateEvent,
     deleteEvent,
+    deleteDeadline,
 } from '../services/calendarService';
 import type { CalendarEvent, CalendarDeadline, EventPayload } from '../services/calendarService';
 import EventModal from '../components/EventModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import '../styles/calendar.css';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -105,6 +108,7 @@ interface TooltipState { x: number; y: number; item: DayItem; }
 
 const CalendarPage: React.FC = () => {
     const { user } = useAuth();
+    const { toast } = useToast();
     const canWrite = user?.role === 'admin' || user?.role === 'asesor';
     const today    = new Date();
     const todayKey = localKey(today);
@@ -120,6 +124,8 @@ const CalendarPage: React.FC = () => {
     const [tooltip,     setTooltip]     = useState<TooltipState | null>(null);
     const [modalEvent,  setModalEvent]  = useState<CalendarEvent | null | undefined>(undefined);
     const [modalDate,   setModalDate]   = useState<string | undefined>(undefined);
+    const [confirmDeadlineId,  setConfirmDeadlineId]  = useState<string | null>(null);
+    const [deletingDeadline,   setDeletingDeadline]   = useState(false);
 
     // modalEvent = undefined → closed, null → create, CalendarEvent → edit
 
@@ -184,21 +190,44 @@ const CalendarPage: React.FC = () => {
 
     // ── Day click ────────────────────────────────────────────────────────────
 
-    const handleDayClick = (key: string) => {
-        setSelectedDay((prev) => (prev === key ? null : key));
+    // Empty cell + canWrite → create modal; otherwise → toggle day panel
+    const handleCellClick = (key: string, hasEvents: boolean) => {
+        if (canWrite && !hasEvents) {
+            setModalDate(key);
+            setModalEvent(null);
+        } else {
+            setSelectedDay((prev) => (prev === key ? null : key));
+        }
     };
 
-    const handleDayDoubleClick = (key: string) => {
-        if (!canWrite) return;
-        setModalDate(key);
-        setModalEvent(null);
-    };
-
-    const handleChipClick = (e: React.MouseEvent, item: DayItem) => {
+    const handleChipClick = (e: React.MouseEvent, item: DayItem, dateKey?: string) => {
         e.stopPropagation();
-        if (item.isDeadline || !item.raw) return;
+        if (item.isDeadline) {
+            if (dateKey) setSelectedDay(dateKey);
+            return;
+        }
+        if (!item.raw) return;
         setModalEvent(item.raw);
         setModalDate(undefined);
+    };
+
+    const handleDeleteDeadline = (id: string) => {
+        setConfirmDeadlineId(id);
+    };
+
+    const executeDeleteDeadline = async () => {
+        if (!confirmDeadlineId) return;
+        setDeletingDeadline(true);
+        try {
+            await deleteDeadline(confirmDeadlineId);
+            setDeadlines((prev) => prev.filter((d) => d.id !== confirmDeadlineId));
+            toast.success('Fecha límite eliminada');
+            setConfirmDeadlineId(null);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Error al eliminar');
+        } finally {
+            setDeletingDeadline(false);
+        }
     };
 
     // ── Tooltip ──────────────────────────────────────────────────────────────
@@ -211,18 +240,31 @@ const CalendarPage: React.FC = () => {
     // ── CRUD ────────────────────────────────────────────────────────────────
 
     const handleSave = async (payload: EventPayload) => {
-        if (modalEvent) {
-            const updated = await updateEvent(modalEvent.id, payload);
-            setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
-        } else {
-            const created = await createEvent(payload);
-            setEvents((prev) => [...prev, created]);
+        try {
+            if (modalEvent) {
+                const updated = await updateEvent(modalEvent.id, payload);
+                setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+                toast.success('Evento actualizado correctamente');
+            } else {
+                const created = await createEvent(payload);
+                setEvents((prev) => [...prev, created]);
+                toast.success('Evento creado correctamente');
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Error al guardar el evento');
+            throw err;
         }
     };
 
     const handleDelete = async (id: string) => {
-        await deleteEvent(id);
-        setEvents((prev) => prev.filter((e) => e.id !== id));
+        try {
+            await deleteEvent(id);
+            setEvents((prev) => prev.filter((e) => e.id !== id));
+            toast.success('Evento eliminado');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Error al eliminar el evento');
+            throw err;
+        }
     };
 
     // ── Upcoming summary ─────────────────────────────────────────────────────
@@ -340,21 +382,37 @@ const CalendarPage: React.FC = () => {
                                             <div
                                                 key={key}
                                                 className={cls}
-                                                onClick={() => handleDayClick(key)}
-                                                onDoubleClick={() => handleDayDoubleClick(key)}
+                                                onClick={() => handleCellClick(key, items.length > 0)}
                                                 role="gridcell"
                                                 tabIndex={0}
                                                 aria-label={`${day.getDate()} ${MONTHS_ES[month]}${items.length ? `, ${items.length} evento${items.length > 1 ? 's' : ''}` : ''}`}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleDayClick(key)}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleCellClick(key, items.length > 0)}
                                             >
-                                                <span className="cal-cell__num">{day.getDate()}</span>
+                                                <div className="cal-cell__top">
+                                                    <span className="cal-cell__dow">{DAYS_SHORT[(day.getDay() + 6) % 7]}</span>
+                                                    <span className="cal-cell__num">{day.getDate()}</span>
+                                                    {canWrite && (
+                                                        <button
+                                                            className="cal-cell__add-btn"
+                                                            onClick={(e) => { e.stopPropagation(); setModalDate(key); setModalEvent(null); }}
+                                                            aria-label="Agregar evento"
+                                                            tabIndex={-1}
+                                                            title="Agregar evento"
+                                                        >
+                                                            <Plus size={10} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <div className="cal-cell__events">
+                                                    {items.length === 0 && canWrite && (
+                                                        <span className="cal-cell__empty-hint">+ Agregar</span>
+                                                    )}
                                                     {items.slice(0, 3).map((it) => (
                                                         <div
                                                             key={it.id}
                                                             className={`cal-event-card ${cardColorClass(it.tipo, it.isDeadline)}`}
                                                             title={it.title}
-                                                            onClick={(e) => handleChipClick(e, it)}
+                                                            onClick={(e) => handleChipClick(e, it, key)}
                                                             onMouseEnter={(e) => showTooltip(e, it)}
                                                             onMouseLeave={hideTooltip}
                                                         >
@@ -377,7 +435,7 @@ const CalendarPage: React.FC = () => {
                                         <p className="cal-empty-state__title">Sin eventos este mes</p>
                                         {canWrite && (
                                             <p className="cal-empty-state__hint">
-                                                Haz doble clic en un día o usa el botón "Nuevo evento"
+                                                Haz clic en un día o usa el botón "Nuevo evento"
                                             </p>
                                         )}
                                     </div>
@@ -387,6 +445,7 @@ const CalendarPage: React.FC = () => {
 
                         {/* ── Week View ─────────────────────────────────────── */}
                         {viewMode === 'week' && (
+                            <div className="cal-week-scroll-wrap">
                             <div className="cal-week-grid">
                                 {weekDates.map((day, i) => {
                                     const key   = localKey(day);
@@ -395,8 +454,8 @@ const CalendarPage: React.FC = () => {
                                     return (
                                         <div
                                             key={key}
-                                            className={`cal-week-col ${isToday ? 'cal-week-col--today' : ''}`}
-                                            onDoubleClick={() => handleDayDoubleClick(key)}
+                                            className={`cal-week-col ${isToday ? 'cal-week-col--today' : ''}${canWrite ? ' cal-week-col--interactive' : ''}`}
+                                            onClick={() => { if (canWrite) { setModalDate(key); setModalEvent(null); } }}
                                         >
                                             <div className="cal-week-col__header">
                                                 <span className="cal-week-col__dow">{DAYS_FULL[i].slice(0, 3)}</span>
@@ -406,12 +465,14 @@ const CalendarPage: React.FC = () => {
                                             </div>
                                             <div className="cal-week-col__events">
                                                 {items.length === 0 ? (
-                                                    <span className="cal-week-col__empty">–</span>
+                                                    canWrite
+                                                        ? <span className="cal-week-col__empty-interactive">+ Agregar</span>
+                                                        : <span className="cal-week-col__empty">–</span>
                                                 ) : items.map((it) => (
                                                     <div
                                                         key={it.id}
                                                         className={`cal-week-event ${chipColorClass(it.tipo, it.isDeadline).replace('cal-chip--', 'cal-week-event--')}`}
-                                                        onClick={(e) => handleChipClick(e, it)}
+                                                        onClick={(e) => { e.stopPropagation(); handleChipClick(e, it); }}
                                                         onMouseEnter={(e) => showTooltip(e, it)}
                                                         onMouseLeave={hideTooltip}
                                                         title={it.title}
@@ -424,6 +485,7 @@ const CalendarPage: React.FC = () => {
                                         </div>
                                     );
                                 })}
+                            </div>
                             </div>
                         )}
 
@@ -470,7 +532,7 @@ const CalendarPage: React.FC = () => {
                                             <li
                                                 key={it.id}
                                                 className={`cal-day-panel__item ${!it.isDeadline && canWrite ? 'cal-day-panel__item--clickable' : ''} ${chipColorClass(it.tipo, it.isDeadline).replace('cal-chip--', 'cal-day-panel__item--')}`}
-                                                onClick={() => handleChipClick({ stopPropagation: () => {} } as React.MouseEvent, it)}
+                                                onClick={() => !it.isDeadline && handleChipClick({ stopPropagation: () => {} } as React.MouseEvent, it)}
                                             >
                                                 <span className={`cal-chip ${chipColorClass(it.tipo, it.isDeadline)}`}>
                                                     {it.isDeadline ? 'Entrega' : it.tipo}
@@ -478,6 +540,16 @@ const CalendarPage: React.FC = () => {
                                                 <span className="cal-day-panel__item-title">{it.title}</span>
                                                 {!it.isDeadline && it.raw?.ubicacion && (
                                                     <span className="cal-day-panel__item-loc">{it.raw.ubicacion}</span>
+                                                )}
+                                                {it.isDeadline && canWrite && (
+                                                    <button
+                                                        className="cal-day-panel__item-del"
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteDeadline(it.id); }}
+                                                        title="Eliminar fecha límite"
+                                                        aria-label="Eliminar fecha límite"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
                                                 )}
                                             </li>
                                         ))}
@@ -502,6 +574,17 @@ const CalendarPage: React.FC = () => {
                         <p className="cal-tooltip__loc">{tooltip.item.raw.ubicacion}</p>
                     )}
                 </div>
+            )}
+
+            {/* ── Confirm Delete Deadline ───────────────────────────────── */}
+            {confirmDeadlineId && (
+                <ConfirmModal
+                    title="Eliminar fecha límite"
+                    message="¿Seguro que deseas eliminar esta fecha límite del calendario? Esta acción no se puede deshacer."
+                    loading={deletingDeadline}
+                    onConfirm={executeDeleteDeadline}
+                    onCancel={() => setConfirmDeadlineId(null)}
+                />
             )}
 
             {/* ── Event Modal ────────────────────────────────────────────── */}
