@@ -6,6 +6,7 @@ const REQUIRED_VARS = [
   'DB_PASSWORD',
   'PORT',
   'JWT_SECRET',
+  'CORS_ORIGIN',
 ];
 
 const validate = () => {

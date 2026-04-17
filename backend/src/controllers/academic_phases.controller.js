@@ -41,7 +41,10 @@ const create = async (req, res, next) => {
 /** PUT /api/academic-phases/:id — actualiza nombre y descripción. Solo admin. */
 const update = async (req, res, next) => {
     try {
-        const id          = Number(req.params.id);
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id < 1) {
+            return res.status(400).json({ error: 'ID debe ser un número entero positivo' });
+        }
         const name        = (req.body.name ?? '').trim();
         const description = (req.body.description ?? '').trim();
 
@@ -75,6 +78,9 @@ const update = async (req, res, next) => {
 const toggle = async (req, res, next) => {
     try {
         const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id < 1) {
+            return res.status(400).json({ error: 'ID debe ser un número entero positivo' });
+        }
 
         const { rows, rowCount } = await pool.query(
             'UPDATE academic_phases SET is_active = NOT is_active WHERE id = $1 RETURNING *',

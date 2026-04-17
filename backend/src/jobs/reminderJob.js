@@ -29,18 +29,6 @@ async function runReminders() {
       return;
     }
 
-    // Find active recipients (admin + asesor)
-    const { rows: users } = await client.query(`
-      SELECT DISTINCT u.id
-      FROM   users u
-      JOIN   user_roles ur ON ur.user_id = u.id
-      JOIN   roles r       ON r.id = ur.role_id
-      WHERE  r.nombre IN ('admin', 'asesor')
-        AND  u.estado = 'activo'
-    `);
-
-    if (!users.length) return;
-
     let created = 0;
 
     for (const ev of events) {
@@ -53,25 +41,27 @@ async function runReminders() {
         ? `Tienes un evento mañana: "${ev.titulo}" (${fechaStr})`
         : `Tienes un evento en ${dias} días: "${ev.titulo}" (${fechaStr})`;
 
-      for (const user of users) {
-        // Skip if a notification for this event was already sent today
-        const { rows: exists } = await client.query(`
-          SELECT 1 FROM notifications
-          WHERE  user_id  = $1
-            AND  event_id = $2
-            AND  created_at::date = CURRENT_DATE
-          LIMIT 1
-        `, [user.id, ev.id]);
+      // Batch insert: una sola query por evento en vez de N queries por usuario
+      const { rowCount } = await client.query(`
+        INSERT INTO notifications (id, user_id, titulo, mensaje, event_id, created_at)
+        SELECT gen_random_uuid(), u.id, $1, $2, $3, NOW()
+        FROM (
+          SELECT DISTINCT u.id
+          FROM   users u
+          JOIN   user_roles ur ON ur.user_id = u.id
+          JOIN   roles r       ON r.id = ur.role_id
+          WHERE  r.nombre IN ('admin', 'asesor')
+            AND  u.estado = 'activo'
+        ) u
+        WHERE NOT EXISTS (
+          SELECT 1 FROM notifications n
+          WHERE n.user_id  = u.id
+            AND n.event_id = $3
+            AND n.created_at::date = CURRENT_DATE
+        )
+      `, [titulo, mensaje, ev.id]);
 
-        if (exists.length) continue;
-
-        await client.query(`
-          INSERT INTO notifications (id, user_id, titulo, mensaje, event_id, created_at)
-          VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
-        `, [user.id, titulo, mensaje, ev.id]);
-
-        created++;
-      }
+      created += rowCount;
     }
 
     console.log(`[reminderJob] Created ${created} notification(s).`);

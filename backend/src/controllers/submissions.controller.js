@@ -1,5 +1,7 @@
 const pool = require('../db/pool');
 
+const URL_REGEX = /^https?:\/\/.+/i;
+
 const SUBMISSION_RETURNING = `id, project_deliverable_id, submitted_by, numero_version,
                                url_archivo, comentario_entrega, es_final, submitted_at`;
 
@@ -47,6 +49,9 @@ const create = async (req, res, next) => {
 
     if (!project_deliverable_id || !url_archivo?.trim()) {
       return res.status(400).json({ error: 'project_deliverable_id y url_archivo son requeridos' });
+    }
+    if (!URL_REGEX.test(url_archivo.trim())) {
+      return res.status(400).json({ error: 'url_archivo debe ser una URL HTTP(S) válida' });
     }
 
     // submitted_by viene del token — el usuario solo puede enviar como sí mismo

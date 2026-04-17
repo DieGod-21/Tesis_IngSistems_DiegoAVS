@@ -204,11 +204,7 @@ const create = async (req, res, next) => {
         );
         res.status(201).json(rows[0]);
     } catch (err) {
-        console.error('[students.create] DB error:', err.message, '| payload:', {
-            nombre_completo: req.body.nombre_completo,
-            carnet_id: req.body.carnet_id,
-            fase_academica: req.body.fase_academica,
-        });
+        console.error('[students.create] DB error:', err.message);
         next(err);
     }
 };
@@ -302,6 +298,9 @@ const bulkCreate = async (req, res, next) => {
         if (filas.length === 0) {
             return res.status(400).json({ error: 'El array "filas" no puede estar vacío' });
         }
+        if (filas.length > 500) {
+            return res.status(400).json({ error: 'Máximo 500 filas por importación' });
+        }
 
         const created_by = req.user.user_id;
 
@@ -385,7 +384,7 @@ const bulkCreate = async (req, res, next) => {
                 carnetsCargaActual.add(carnetNorm);
 
                 const approvedBool = parseApproved(rawApproved);
-                const sp = `sp_${i}`;
+                const sp = `sp_${Number(i)}`;
                 await client.query(`SAVEPOINT ${sp}`);
                 try {
                     await client.query(
@@ -418,7 +417,6 @@ const bulkCreate = async (req, res, next) => {
         try {
             const filename   = `importacion_${new Date().toISOString().slice(0, 10)}.xlsx`;
             const status     = importados === 0 ? 'error' : 'success';
-            const rechazados = errores.length;
             await pool.query(
                 `INSERT INTO upload_history
                    (filename, type, status, imported, rejected, total_rows, errors, created_by)
