@@ -9,10 +9,17 @@ const REQUIRED_VARS = [
   'CORS_ORIGIN',
 ];
 
+const MIN_JWT_SECRET_LENGTH = 32;
+
 const validate = () => {
   const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
   if (missing.length) {
     console.error(`[ENV] Variables de entorno faltantes: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  if (process.env.JWT_SECRET.length < MIN_JWT_SECRET_LENGTH) {
+    console.error(`[ENV] JWT_SECRET debe tener al menos ${MIN_JWT_SECRET_LENGTH} caracteres (actual: ${process.env.JWT_SECRET.length})`);
     process.exit(1);
   }
 };

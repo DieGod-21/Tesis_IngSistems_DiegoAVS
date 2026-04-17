@@ -200,23 +200,13 @@ export async function getRecentStudentsSummary(limit = 5): Promise<RecentStudent
  * Filtra opcionalmente por query.
  */
 export async function getPendingActions(query?: string): Promise<PendingAction[]> {
-    const url = query?.trim()
-        ? `/students?approved=false&limit=50`
-        : `/students?approved=false&limit=50`;
+    const params = new URLSearchParams({ approved: 'false', limit: '50' });
+    if (query?.trim()) params.set('search', query.trim());
 
-    const response = await apiFetch<{ data: BackendStudent[]; pagination: unknown }>(url);
+    const response = await apiFetch<{ data: BackendStudent[]; pagination: unknown }>(`/students?${params}`);
     const students = Array.isArray(response) ? response : response.data;
 
-    const q = query?.trim().toLowerCase() ?? '';
-
     return students
-        .filter((s) => {
-            if (!q) return true;
-            return (
-                s.nombre_completo.toLowerCase().includes(q) ||
-                s.carnet_id.toLowerCase().includes(q)
-            );
-        })
         .map((s, i): PendingAction => ({
             id:            s.id,
             studentName:   s.nombre_completo,

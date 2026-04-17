@@ -96,7 +96,7 @@ const STUDENT_SELECT = `
 
 const getAll = async (req, res, next) => {
     try {
-        const { fase_academica, academic_phase_id, semester_id, approved } = req.query;
+        const { fase_academica, academic_phase_id, semester_id, approved, search } = req.query;
         const { page, limit, offset } = parsePagination(req.query);
 
         let where = ' WHERE 1=1';
@@ -119,6 +119,10 @@ const getAll = async (req, res, next) => {
         if (approved !== undefined) {
             params.push(approved === 'true');
             where += ` AND s.approved = $${params.length}`;
+        }
+        if (search?.trim()) {
+            params.push(`%${search.trim()}%`);
+            where += ` AND (s.nombre_completo ILIKE $${params.length} OR s.carnet_id ILIKE $${params.length})`;
         }
 
         params.push(limit, offset);

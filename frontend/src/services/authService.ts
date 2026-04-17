@@ -30,6 +30,7 @@ export interface LoginCredentials {
 
 interface JwtPayload {
   user_id: string;
+  nombre: string;
   roles: string[];
   exp: number;
 }
@@ -90,7 +91,7 @@ export const login = async (email: string, password: string): Promise<User> => {
   const user: User = {
     id:    payload.user_id,
     email: email.trim().toLowerCase(),
-    name:  email.split('@')[0],   // El backend no devuelve nombre en el token
+    name:  payload.nombre || email.split('@')[0],
     role:  payload.roles?.[0] ?? 'user',
   };
 

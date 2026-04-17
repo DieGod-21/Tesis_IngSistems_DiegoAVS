@@ -162,11 +162,11 @@ const changePassword = async (req, res, next) => {
 
     const hash = await bcrypt.hash(new_password, 12);
     await pool.query(
-      'UPDATE users SET contrasena_hash = $1, updated_at = NOW() WHERE id = $2',
+      'UPDATE users SET contrasena_hash = $1, token_version = token_version + 1, updated_at = NOW() WHERE id = $2',
       [hash, req.user.user_id]
     );
 
-    res.json({ message: 'Contraseña actualizada correctamente' });
+    res.json({ message: 'Contraseña actualizada correctamente. Inicia sesión nuevamente.' });
   } catch (err) {
     next(err);
   }
