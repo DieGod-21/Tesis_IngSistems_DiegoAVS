@@ -1,13 +1,20 @@
 const pool = require('../db/pool');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
 
 const SEMESTER_COLS = `id, nombre, anio, numero, created_at, updated_at`;
 
-const getAll = async (_req, res, next) => {
+const getAll = async (req, res, next) => {
   try {
+    const { page, limit, offset } = parsePagination(req.query);
     const { rows } = await pool.query(
-      `SELECT ${SEMESTER_COLS} FROM semesters ORDER BY anio DESC, numero DESC`
+      `SELECT count(*) OVER() AS total_count, ${SEMESTER_COLS}
+       FROM semesters ORDER BY anio DESC, numero DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
-    res.json(rows);
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    const data = rows.map(({ total_count, ...rest }) => rest);
+    res.json(paginatedResponse(data, total, { page, limit }));
   } catch (err) {
     next(err);
   }

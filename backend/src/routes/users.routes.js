@@ -4,6 +4,10 @@ const validateUUID = require('../middleware/validateUUID');
 const authenticate = require('../middleware/authenticate');
 const authorize = require('../middleware/authorize');
 
+// Rutas del usuario autenticado (sin rol admin)
+router.get('/me', authenticate, ctrl.getMe);
+router.patch('/me/password', authenticate, ctrl.changePassword);
+
 // Solo admin puede gestionar usuarios
 router.get('/', authenticate, authorize('admin'), ctrl.getAll);
 router.get('/:id', authenticate, authorize('admin'), validateUUID('id'), ctrl.getById);

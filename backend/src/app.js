@@ -20,7 +20,18 @@ const app = express();
 
 app.use(helmet());
 app.use(compression());
-app.use(cors({ origin: process.env.CORS_ORIGIN }));
+
+// CORS — soporta múltiples orígenes separados por coma en CORS_ORIGIN
+const corsOrigin = process.env.CORS_ORIGIN || '';
+const allowedOrigins = corsOrigin.split(',').map(o => o.trim()).filter(Boolean);
+
+app.use(cors({
+    origin: allowedOrigins.length <= 1
+        ? (allowedOrigins[0] || false)
+        : allowedOrigins,
+    credentials: true,
+}));
+
 app.use(express.json({ limit: '1mb' }));
 
 // Swagger UI — solo en desarrollo
@@ -49,6 +60,7 @@ app.use('/api/deadlines',   require('./routes/deadlines.routes'));
 app.use('/api/uploads',         require('./routes/uploads.routes'));
 app.use('/api/academic-phases', require('./routes/academic_phases.routes'));
 app.use('/api/notifications',   require('./routes/notifications.routes'));
+app.use('/api/dashboard',      require('./routes/dashboard.routes'));
 
 app.get('/', (_req, res) => {
     res.json({ message: 'Backend tesis_db funcionando correctamente', version: '1.0.0' });

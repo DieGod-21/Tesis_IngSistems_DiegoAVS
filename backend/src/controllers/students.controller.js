@@ -3,6 +3,7 @@ const ExcelJS = require('exceljs');
 const { EMAIL_REGEX } = require('../constants');
 const { getPhaseById, getPhaseByName, getAllPhases } = require('../utils/phaseCache');
 const { validateCarnet } = require('../utils/validateCarnet');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,33 +97,40 @@ const STUDENT_SELECT = `
 const getAll = async (req, res, next) => {
     try {
         const { fase_academica, academic_phase_id, semester_id, approved } = req.query;
+        const { page, limit, offset } = parsePagination(req.query);
 
-        let query = STUDENT_SELECT + ' WHERE 1=1';
+        let where = ' WHERE 1=1';
         const params = [];
 
         if (academic_phase_id) {
             params.push(Number(academic_phase_id));
-            query += ` AND s.academic_phase_id = $${params.length}`;
+            where += ` AND s.academic_phase_id = $${params.length}`;
         } else if (fase_academica) {
-            // Compatibilidad legado: resuelve el nombre a ID via cache
             const phase = getPhaseByName(fase_academica);
             if (phase) {
                 params.push(phase.id);
-                query += ` AND s.academic_phase_id = $${params.length}`;
+                where += ` AND s.academic_phase_id = $${params.length}`;
             }
         }
         if (semester_id) {
             params.push(semester_id);
-            query += ` AND s.semester_id = $${params.length}`;
+            where += ` AND s.semester_id = $${params.length}`;
         }
         if (approved !== undefined) {
             params.push(approved === 'true');
-            query += ` AND s.approved = $${params.length}`;
+            where += ` AND s.approved = $${params.length}`;
         }
-        query += ' ORDER BY s.nombre_completo';
+
+        params.push(limit, offset);
+        const query = STUDENT_SELECT.replace(
+            'SELECT s.id,',
+            'SELECT count(*) OVER() AS total_count, s.id,'
+        ) + where + ` ORDER BY s.nombre_completo LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
         const { rows } = await pool.query(query, params);
-        res.json(rows);
+        const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+        const data = rows.map(({ total_count, ...rest }) => rest);
+        res.json(paginatedResponse(data, total, { page, limit }));
     } catch (err) {
         next(err);
     }

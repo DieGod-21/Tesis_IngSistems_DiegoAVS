@@ -1,6 +1,7 @@
 const pool = require('../db/pool');
 const { ESTADOS } = require('../constants');
 const { validatePhaseName } = require('../utils/phases');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
 
 const ESTADOS_VALIDOS = ESTADOS.proyecto;
 
@@ -10,6 +11,7 @@ const PROJECT_RETURNING = `id, titulo, descripcion, fase_academica, estado,
 const getAll = async (req, res, next) => {
   try {
     const { estado, fase_academica, semester_id } = req.query;
+    const { page, limit, offset } = parsePagination(req.query);
 
     if (estado && !ESTADOS_VALIDOS.includes(estado)) {
       return res.status(400).json({ error: `estado debe ser uno de: ${ESTADOS_VALIDOS.join(', ')}` });
@@ -19,8 +21,16 @@ const getAll = async (req, res, next) => {
       if (err) return res.status(400).json({ error: err });
     }
 
-    let query = `
-      SELECT p.id, p.titulo, p.descripcion, p.fase_academica, p.estado,
+    let where = '';
+    const params = [];
+    if (estado)         { params.push(estado);         where += ` AND p.estado = $${params.length}`; }
+    if (fase_academica) { params.push(fase_academica); where += ` AND p.fase_academica = $${params.length}`; }
+    if (semester_id)    { params.push(semester_id);    where += ` AND p.semester_id = $${params.length}`; }
+
+    params.push(limit, offset);
+    const query = `
+      SELECT count(*) OVER() AS total_count,
+             p.id, p.titulo, p.descripcion, p.fase_academica, p.estado,
              p.semester_id, p.es_grupal, p.created_at, sem.nombre AS semestre,
              array_agg(DISTINCT s.nombre_completo) FILTER (WHERE s.id IS NOT NULL) AS estudiantes,
              array_agg(DISTINCT u.nombre_completo) FILTER (WHERE u.id IS NOT NULL) AS asesores
@@ -30,16 +40,16 @@ const getAll = async (req, res, next) => {
       LEFT JOIN students s          ON s.id = ps.student_id
       LEFT JOIN project_advisors pa ON pa.project_id = p.id AND pa.activo = TRUE
       LEFT JOIN users u             ON u.id = pa.advisor_id
-      WHERE 1=1
+      WHERE 1=1 ${where}
+      GROUP BY p.id, sem.nombre
+      ORDER BY p.created_at DESC
+      LIMIT $${params.length - 1} OFFSET $${params.length}
     `;
-    const params = [];
-    if (estado)         { params.push(estado);         query += ` AND p.estado = $${params.length}`; }
-    if (fase_academica) { params.push(fase_academica); query += ` AND p.fase_academica = $${params.length}`; }
-    if (semester_id)    { params.push(semester_id);    query += ` AND p.semester_id = $${params.length}`; }
-    query += ' GROUP BY p.id, sem.nombre ORDER BY p.created_at DESC';
 
     const { rows } = await pool.query(query, params);
-    res.json(rows);
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    const data = rows.map(({ total_count, ...rest }) => rest);
+    res.json(paginatedResponse(data, total, { page, limit }));
   } catch (err) {
     next(err);
   }

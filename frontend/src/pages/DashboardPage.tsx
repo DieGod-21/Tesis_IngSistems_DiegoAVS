@@ -80,7 +80,7 @@ const DashboardPage: React.FC = () => {
     const history = useHistory();
 
     // Datos del servicio dashboard (KPIs, acciones pendientes, deadlines)
-    const { summary, tableState, searchQuery, loadSummary, loadActions, handleSearch } =
+    const { summary, tableState, searchQuery, loadSummary, loadActions } =
         useDashboardData();
 
     // Datos de estudiantes desde localStorage (KPIs + filtro rápido)
@@ -94,7 +94,7 @@ const DashboardPage: React.FC = () => {
     } = useStudentsDashboard();
 
     return (
-        <AppShell onSearch={handleSearch}>
+        <AppShell>
             <div className="dash-body">
 
                 {/* ── Encabezado institucional ─────────────────── */}

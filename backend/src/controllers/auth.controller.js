@@ -2,6 +2,7 @@ const pool    = require('../db/pool');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const { EMAIL_REGEX } = require('../constants');
+const { JWT_OPTIONS } = require('../lib/jwtConfig');
 
 const login = async (req, res, next) => {
   try {
@@ -15,7 +16,7 @@ const login = async (req, res, next) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT u.id, u.contrasena_hash, u.estado,
+      `SELECT u.id, u.nombre_completo, u.contrasena_hash, u.estado,
               array_agg(r.nombre) FILTER (WHERE r.nombre IS NOT NULL) AS roles
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -25,8 +26,6 @@ const login = async (req, res, next) => {
       [correo_electronico.trim()]
     );
 
-    // Mismo mensaje para usuario inexistente y contraseña incorrecta
-    // → evita enumeración de usuarios
     const user = rows[0];
     const passwordOk = user && await bcrypt.compare(contrasena, user.contrasena_hash);
 
@@ -39,9 +38,9 @@ const login = async (req, res, next) => {
     }
 
     const token = jwt.sign(
-      { user_id: user.id, roles: user.roles ?? [] },
+      { user_id: user.id, nombre: user.nombre_completo, roles: user.roles ?? [] },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '1h', ...JWT_OPTIONS }
     );
 
     res.json({ token });
@@ -50,4 +49,8 @@ const login = async (req, res, next) => {
   }
 };
 
-module.exports = { login };
+const verify = async (req, res) => {
+  res.json({ valid: true, user: req.user });
+};
+
+module.exports = { login, verify };

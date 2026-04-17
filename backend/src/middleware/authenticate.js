@@ -1,9 +1,6 @@
 const jwt = require('jsonwebtoken');
+const { JWT_OPTIONS } = require('../lib/jwtConfig');
 
-/**
- * Verifica el JWT en el header Authorization: Bearer <token>
- * Si es válido, adjunta req.user = { user_id, roles }
- */
 const authenticate = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.startsWith('Bearer ')
@@ -15,7 +12,7 @@ const authenticate = (req, res, next) => {
   }
 
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = jwt.verify(token, process.env.JWT_SECRET, JWT_OPTIONS);
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido o expirado' });

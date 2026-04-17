@@ -1,4 +1,12 @@
 const { Pool } = require('pg');
+const logger = require('../lib/logger');
+
+function buildSslConfig() {
+  if (process.env.NODE_ENV !== 'production') return false;
+  const cfg = { rejectUnauthorized: true };
+  if (process.env.DB_CA_CERT) cfg.ca = process.env.DB_CA_CERT;
+  return cfg;
+}
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -9,14 +17,14 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: buildSslConfig(),
 });
 
 pool.connect()
   .then((client) => {
-    console.log('Conexión a PostgreSQL exitosa');
+    logger.info('Conexión a PostgreSQL exitosa');
     client.release();
   })
-  .catch((err) => console.error('Error al conectar a PostgreSQL:', err.message));
+  .catch((err) => logger.error({ err }, 'Error al conectar a PostgreSQL'));
 
 module.exports = pool;

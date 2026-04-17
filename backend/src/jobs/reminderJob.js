@@ -4,14 +4,16 @@
  * Daily background job that creates in-app notifications for events
  * with reminders enabled whose date matches "today + recordatorio_tiempo days".
  *
- * Runs at 08:00 every day using a self-scheduling setTimeout (no external deps).
+ * Runs at 08:00 every day using node-cron.
  * Recipients: all active users with admin or asesor role.
  */
 
-const pool = require('../db/pool');
+const cron   = require('node-cron');
+const pool   = require('../db/pool');
+const logger = require('../lib/logger');
 
 async function runReminders() {
-  console.log('[reminderJob] Checking upcoming events…');
+  logger.info('[reminderJob] Checking upcoming events…');
   const client = await pool.connect();
 
   try {
@@ -25,7 +27,7 @@ async function runReminders() {
     `);
 
     if (!events.length) {
-      console.log('[reminderJob] No reminders to send today.');
+      logger.info('[reminderJob] No reminders to send today.');
       return;
     }
 
@@ -64,35 +66,23 @@ async function runReminders() {
       created += rowCount;
     }
 
-    console.log(`[reminderJob] Created ${created} notification(s).`);
+    logger.info(`[reminderJob] Created ${created} notification(s).`);
   } catch (err) {
-    console.error('[reminderJob] Error:', err.message);
+    logger.error({ err }, '[reminderJob] Error running reminders');
   } finally {
     client.release();
   }
 }
 
 /**
- * Schedules the next run at 08:00 local server time.
- * Self-reschedules after each execution.
+ * Starts the cron job: every day at 08:00.
+ * node-cron format: "minute hour * * *"
  */
-function scheduleNextRun() {
-  const now   = new Date();
-  const next  = new Date(now);
-  next.setHours(8, 0, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1); // already past 8 AM today
-
-  const delay = next.getTime() - now.getTime();
-  console.log(`[reminderJob] Next run at ${next.toLocaleString('es-GT')} (in ${Math.round(delay / 60000)} min)`);
-
-  setTimeout(async () => {
-    await runReminders();
-    scheduleNextRun(); // reschedule for tomorrow
-  }, delay);
-}
-
 function start() {
-  scheduleNextRun();
+  cron.schedule('0 8 * * *', () => {
+    runReminders();
+  });
+  logger.info('[reminderJob] Cron scheduled — daily at 08:00');
 }
 
 module.exports = { start, runReminders };

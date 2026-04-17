@@ -21,4 +21,7 @@ const TIPOS = {
     evaluacion: ['parcial', 'final', 'seguimiento'],
 };
 
-module.exports = { EMAIL_REGEX, ESTADOS, TIPOS };
+/** Mínimo 8 caracteres, 1 mayúscula, 1 minúscula, 1 número */
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+module.exports = { EMAIL_REGEX, ESTADOS, TIPOS, PASSWORD_REGEX };

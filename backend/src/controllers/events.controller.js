@@ -1,6 +1,7 @@
 const pool = require('../db/pool');
 const { TIPOS } = require('../constants');
 const { validatePhaseName } = require('../utils/phases');
+const { parsePagination, paginatedResponse } = require('../lib/pagination');
 
 const TIPOS_VALIDOS = TIPOS.evento;
 
@@ -12,6 +13,7 @@ const EVENT_COLS = `id, titulo, tipo, fecha_inicio, fecha_fin, ubicacion,
 const getAll = async (req, res, next) => {
   try {
     const { tipo, semester_id, fase_academica } = req.query;
+    const { page, limit, offset } = parsePagination(req.query);
 
     if (tipo && !TIPOS_VALIDOS.includes(tipo)) {
       return res.status(400).json({ error: `tipo debe ser uno de: ${TIPOS_VALIDOS.join(', ')}` });
@@ -21,15 +23,22 @@ const getAll = async (req, res, next) => {
       if (err) return res.status(400).json({ error: err });
     }
 
-    let query = `SELECT ${EVENT_COLS} FROM events WHERE 1=1`;
+    let where = '';
     const params = [];
-    if (tipo)           { params.push(tipo);           query += ` AND tipo = $${params.length}`; }
-    if (semester_id)    { params.push(semester_id);    query += ` AND semester_id = $${params.length}`; }
-    if (fase_academica) { params.push(fase_academica); query += ` AND fase_academica = $${params.length}`; }
-    query += ' ORDER BY fecha_inicio ASC';
+    if (tipo)           { params.push(tipo);           where += ` AND tipo = $${params.length}`; }
+    if (semester_id)    { params.push(semester_id);    where += ` AND semester_id = $${params.length}`; }
+    if (fase_academica) { params.push(fase_academica); where += ` AND fase_academica = $${params.length}`; }
+
+    params.push(limit, offset);
+    const query = `SELECT count(*) OVER() AS total_count, ${EVENT_COLS}
+                   FROM events WHERE 1=1 ${where}
+                   ORDER BY fecha_inicio ASC
+                   LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     const { rows } = await pool.query(query, params);
-    res.json(rows);
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    const data = rows.map(({ total_count, ...rest }) => rest);
+    res.json(paginatedResponse(data, total, { page, limit }));
   } catch (err) {
     next(err);
   }

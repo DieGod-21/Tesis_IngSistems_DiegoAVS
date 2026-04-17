@@ -11,18 +11,11 @@ import { mapBackendStudent } from '../types/student';
 
 // ─── Lectura ─────────────────────────────────────────────────────────
 
-/** Obtiene todos los estudiantes desde el backend. */
+/** Obtiene todos los estudiantes desde el backend (paginado). */
 export async function getStudents(): Promise<Student[]> {
-    const rows = await apiFetch<BackendStudent[]>('/students');
+    const res = await apiFetch<{ data: BackendStudent[]; pagination: unknown }>('/students?limit=100');
+    const rows = Array.isArray(res) ? res : res.data;
     return rows.map(mapBackendStudent);
-}
-
-/** Retorna los últimos N estudiantes por fecha de actualización. */
-export async function getRecentStudents(n = 5): Promise<Student[]> {
-    const all = await getStudents();
-    return [...all]
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-        .slice(0, n);
 }
 
 // ─── Escritura ────────────────────────────────────────────────────────

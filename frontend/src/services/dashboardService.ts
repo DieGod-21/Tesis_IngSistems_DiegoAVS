@@ -2,12 +2,13 @@
  * dashboardService.ts
  *
  * Fuente de datos para el Panel de Control.
- * - KPIs: calculados dinámicamente desde GET /api/students
+ * - KPIs: desde GET /api/dashboard/summary (agregaciones SQL en backend)
+ * - Estudiantes recientes: desde GET /api/dashboard/recent-students
  * - Acciones pendientes: estudiantes sin aprobar (approved = false)
- * - Deadlines: estáticos (el backend tiene /api/deadlines pero sin datos semilla definidos)
- * - Recursos: estáticos
+ * - Deadlines: estaticos (el backend tiene /api/deadlines pero sin datos semilla definidos)
+ * - Recursos: estaticos
  *
- * Universidad Mariano Gálvez — Coordinación de Proyecto de Graduación
+ * Universidad Mariano Galvez — Coordinacion de Proyecto de Graduacion
  */
 
 import { apiFetch } from './apiClient';
@@ -62,6 +63,31 @@ export interface DashboardSummary {
     resources: FacultyResource[];
 }
 
+/** Respuesta del backend GET /api/dashboard/summary */
+interface BackendSummary {
+    total: number;
+    approved: number;
+    pending: number;
+    completionPct: number;
+    byPhase: Array<{
+        phase_id: number;
+        phase_name: string;
+        phase_description: string;
+        count: number;
+    }>;
+}
+
+/** Respuesta del backend GET /api/dashboard/recent-students */
+export interface RecentStudent {
+    id: string;
+    nombre_completo: string;
+    carnet_id: string;
+    approved: boolean;
+    updated_at: string;
+    phase_name: string;
+    phase_description: string;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function initials(name: string): string {
@@ -75,7 +101,7 @@ function initials(name: string): string {
 
 const AVATAR_VARIANTS: Array<'blue' | 'green' | 'slate'> = ['blue', 'green', 'slate'];
 
-// ─── Datos estáticos ────────────────────────────────────────────────
+// ─── Datos estaticos ────────────────────────────────────────────────
 
 const STATIC_DEADLINES: Deadline[] = [
     {
@@ -108,38 +134,24 @@ const STATIC_RESOURCES: FacultyResource[] = [
     { id: 'res-3', label: 'Repositorio Institucional',      iconName: 'Link',     href: '#' },
 ];
 
-// ─── API pública ────────────────────────────────────────────────────
+// ─── API publica ────────────────────────────────────────────────────
 
 /**
  * Obtiene el resumen del dashboard.
- * Los KPIs por fase se generan dinámicamente desde los datos de estudiantes —
- * no hay nombres de fase hardcodeados.
+ * Los KPIs se calculan en el backend con SQL (COUNT, GROUP BY).
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-    const students = await apiFetch<BackendStudent[]>('/students');
+    const summary = await apiFetch<BackendSummary>('/dashboard/summary');
 
-    const total    = students.length;
-    const approved = students.filter((s) => s.approved).length;
-    const pending  = total - approved;
-    const completionPct = total > 0 ? Math.round((approved / total) * 100) : 0;
+    const { total, approved, pending, completionPct, byPhase } = summary;
 
-    // Agrupar por academic_phase_id (clave estable) — el nombre es solo para display.
-    // Esto evita duplicados si se renombra una fase en la BD.
-    const countByPhase = new Map<string, { count: number; description: string }>();
-    for (const s of students) {
-        const key   = s.academic_phase_id != null ? String(s.academic_phase_id) : (s.fase_academica ?? '—');
-        const label = s.phase_description ?? s.phase_name ?? s.fase_academica ?? '—';
-        const cur   = countByPhase.get(key) ?? { count: 0, description: label };
-        countByPhase.set(key, { count: cur.count + 1, description: label });
-    }
-
-    const phaseKpis: KpiData[] = Array.from(countByPhase.entries()).map(([key, { count, description }]) => ({
-        id:            `kpi-phase-${key}`,
-        label:         description,
-        value:         String(count),
+    const phaseKpis: KpiData[] = byPhase.map((p) => ({
+        id:            `kpi-phase-${p.phase_id}`,
+        label:         p.phase_description || p.phase_name,
+        value:         String(p.count),
         trend:         '',
         trendPositive: true,
-        description:   `Estudiantes en ${description}`,
+        description:   `Estudiantes en ${p.phase_description || p.phase_name}`,
         iconName:      'GraduationCap',
         iconVariant:   'blue' as const,
     }));
@@ -177,11 +189,23 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 }
 
 /**
+ * Obtiene los estudiantes mas recientes desde el backend.
+ */
+export async function getRecentStudentsSummary(limit = 5): Promise<RecentStudent[]> {
+    return apiFetch<RecentStudent[]>(`/dashboard/recent-students?limit=${limit}`);
+}
+
+/**
  * Devuelve estudiantes sin aprobar como acciones pendientes.
  * Filtra opcionalmente por query.
  */
 export async function getPendingActions(query?: string): Promise<PendingAction[]> {
-    const students = await apiFetch<BackendStudent[]>('/students?approved=false');
+    const url = query?.trim()
+        ? `/students?approved=false&limit=50`
+        : `/students?approved=false&limit=50`;
+
+    const response = await apiFetch<{ data: BackendStudent[]; pagination: unknown }>(url);
+    const students = Array.isArray(response) ? response : response.data;
 
     const q = query?.trim().toLowerCase() ?? '';
 
