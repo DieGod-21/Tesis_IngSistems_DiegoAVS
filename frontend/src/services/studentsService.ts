@@ -5,7 +5,7 @@
  * Consume la API real del backend.
  */
 
-import { apiFetch } from './apiClient';
+import { apiFetch, apiFetchList } from './apiClient';
 import type { BackendStudent } from '../types/student';
 
 // ─── Interfaces ────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ export interface UploadItem {
 // ─── Semesters ──────────────────────────────────────────────────────
 
 export async function getSemesters(): Promise<Semester[]> {
-    return apiFetch<Semester[]>('/semesters');
+    return apiFetchList<Semester>('/semesters');
 }
 
 // ─── Estudiantes ─────────────────────────────────────────────────────

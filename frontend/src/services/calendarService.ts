@@ -1,4 +1,4 @@
-import { apiFetch } from './apiClient';
+import { apiFetch, apiFetchList } from './apiClient';
 
 export interface CalendarEvent {
     id: string;
@@ -33,11 +33,11 @@ export interface EventPayload {
 }
 
 export function getCalendarEvents(): Promise<CalendarEvent[]> {
-    return apiFetch<CalendarEvent[]>('/events');
+    return apiFetchList<CalendarEvent>('/events?limit=100');
 }
 
 export function getCalendarDeadlines(): Promise<CalendarDeadline[]> {
-    return apiFetch<CalendarDeadline[]>('/deadlines');
+    return apiFetchList<CalendarDeadline>('/deadlines?limit=100');
 }
 
 export function createEvent(data: EventPayload): Promise<CalendarEvent> {

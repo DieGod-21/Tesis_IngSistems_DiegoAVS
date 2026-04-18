@@ -73,3 +73,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         clearTimeout(timeoutId);
     }
 }
+
+/** Fetch para endpoints paginados: extrae `.data` si la respuesta es `{ data, pagination }`, o devuelve el array directamente. */
+export async function apiFetchList<T>(path: string, init?: RequestInit): Promise<T[]> {
+    const res = await apiFetch<T[] | { data: T[] }>(path, init);
+    return Array.isArray(res) ? res : (res?.data ?? []);
+}

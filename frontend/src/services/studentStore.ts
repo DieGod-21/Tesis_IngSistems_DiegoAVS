@@ -5,7 +5,7 @@
  * Consume GET/PUT /api/students con JWT automático vía apiFetch.
  */
 
-import { apiFetch } from './apiClient';
+import { apiFetch, apiFetchList } from './apiClient';
 import type { Student, BackendStudent } from '../types/student';
 import { mapBackendStudent } from '../types/student';
 
@@ -13,8 +13,7 @@ import { mapBackendStudent } from '../types/student';
 
 /** Obtiene todos los estudiantes desde el backend (paginado). */
 export async function getStudents(): Promise<Student[]> {
-    const res = await apiFetch<{ data: BackendStudent[]; pagination: unknown }>('/students?limit=100');
-    const rows = Array.isArray(res) ? res : res.data;
+    const rows = await apiFetchList<BackendStudent>('/students?limit=100');
     return rows.map(mapBackendStudent);
 }
 
